@@ -1,0 +1,6 @@
+services:
+  repo-template-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: repo-template-service:latest
