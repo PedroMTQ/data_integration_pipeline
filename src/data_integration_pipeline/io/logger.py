@@ -2,7 +2,7 @@ import logging
 import sys
 
 
-from repo_template.settings import SERVICE_NAME, DEBUG, CODE_VERSION
+from data_integration_pipeline.settings import SERVICE_NAME, DEBUG, CODE_VERSION
 
 # this doesns't work, there's something wrong with Helical's logger, it's consuming all logs
 logger = logging.getLogger(SERVICE_NAME)

@@ -4,6 +4,9 @@ MAKEFLAGS += --no-print-directory
 
 .PHONY: install activate update deps test format check_uv
 
+DOCS_DIR := tmp/audits/gx/uncommitted/data_docs/local_site
+DOCS_PORT := 8080
+
 
 # This block defines the "dictionary" logic once.
 # We use $$ everywhere so Make passes the dollar signs to the Bash shell.
@@ -49,9 +52,8 @@ activate:
 		echo "Error: Environment not found. Run 'make install' first."
 		exit 1
 	fi
-	echo "--- Entering $${ENV["PACKAGE"]} environment (type 'exit' to leave) ---"
-	# We only export the guard and the prompt. The 'ENV' dictionary dies with this recipe.
-	bash --rcfile <(echo "source ~/.bashrc; source $${ENV["ENV_PATH"]}; export IN_MAKE_SHELL=true")
+	echo "--- Entering $${ENV["PACKAGE"]} environment and sourcing .env (type 'exit' to leave) ---"
+	bash --rcfile <(echo "source ~/.bashrc; source scripts/load_dot_env.sh; source $${ENV["ENV_PATH"]}; export IN_MAKE_SHELL=true")
 	unset ENV
 
 # --- 3. Update ---
@@ -69,41 +71,41 @@ update:
 	echo "Update complete."
 
 
-# --- New: Test ---
-test: check_uv
-	@$(SETUP_ENV_VARS)
-	if [ ! -d "$${ENV["ENV_DIR"]}" ]; then
-		echo "Error: Environment not found. Run 'make install' first."
-		exit 1
-	fi
-	
-	source "$${ENV["ENV_PATH"]}"
-	# Check if pytest is available, if not, add it
-	if ! command -v pytest >/dev/null 2>&1; then
-		echo "pytest not found. Installing..."
-		uv add pytest --dev --active
-	fi
-	
-	echo "Running tests for $${ENV["PKG"]}..."
-	pytest
-	unset ENV
+test:
+	@echo "Running tests via uv..."
+	uv run --with pytest pytest
 
-# --- New: Format ---
-format: check_uv
-	@$(SETUP_ENV_VARS)
-	if [ ! -d "$${ENV["ENV_DIR"]}" ]; then
-		echo "Error: Environment not found. Run 'make install' first."
-		exit 1
-	fi
+format:
+	@echo "Running ruff formatter/linter via temporary uv environment..."
+	uv run --with ruff ruff check . --fix
+	uv run --with ruff ruff format .
 
-	echo "Running ruff formatter/linter..."
-	source "$${ENV["ENV_PATH"]}"
-	# Check if ruff is available
-	if ! command -v ruff >/dev/null 2>&1; then
-		echo "ruff not found. Installing..."
-		uv add ruff --dev --active
+
+
+# --- Docker Commands ---
+
+# Run containers in the background
+infra_up:
+	@echo "Starting Docker containers..."
+	docker compose -f docker-compose-infra.yaml up -d
+	@echo "Containers are running. Use 'make infra_status' to check."
+
+# Stop and remove containers
+infra_down:
+	@echo "Stopping Docker containers..."
+	docker compose -f docker-compose-infra.yaml down
+
+# Check the health of your services (useful for your minio-init)
+infra_status:
+	@echo "Current container status:"
+	docker compose ps
+
+audit_docs:
+	@if [ ! -d "$(DOCS_DIR)" ]; then \
+		echo "Error: Data Docs directory not found at $(DOCS_DIR)."; \
+		echo "Run your audit script first to generate the reports."; \
+		exit 1; \
 	fi
-	
-	ruff check . --fix
-	ruff format .
-	unset ENV
+	@echo "--- Starting Data Docs Server at http://localhost:$(DOCS_PORT) ---"
+	@echo "Press Ctrl+C to stop the server."
+	@python -m http.server $(DOCS_PORT) --directory $(DOCS_DIR)

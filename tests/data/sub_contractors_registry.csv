@@ -1,0 +1,139 @@
+Vendor ID,Firm Name,Vendor UEI,Certification Type,Trade Specialty
+NYC-9821,"Elite Electrical Systems, LLC",UEI_9821,MBE,"Electrical, Solar"
+SEA-4432,North West Piping,UEI_4432,DBE,"Plumbing, Utilities"
+CHI-1199,Mid-West Masonry,,WBE,"Brick, Masonry"
+PHX-5501,Sunbelt Roofing,,MBE,Commercial Roofing
+NWK-2289,Metro Steel Fab,UEI_2289,MBE,Structural Steel
+MIA-6603,Coastal Concrete,,DBE,"Foundations, Paving"
+BOS-7704,Harbor Dredging Group,,WBE,Marine Construction
+DEN-8834,Precision HVAC,UEI_8834,SBE,"AC, Heating"
+STL-3306,River City Excavating,,MBE,"Earthwork, Grading"
+PDX-4407,Greenleaf Landscape,,WBE,"Softscape, Irrigation"
+FL-1000,Everglades Climate Control,UEI_1000,MBE,Flooring
+CO-1001,High Peaks Steeel Corp,,WBE,Electrcial
+IL-1002,PRAIRIE STATE CONCRETE,UEI_1002,SBE,Concrete
+OR-1003,Cascade Earth & Stone,UEI_1003,DBE,Excavation
+AZ-1004,Saguaro Carpentry,UEI_1004,WBE,Electrical
+IL-1005,Great Lakes Dredging,UEI_1005,VOSB,Dredging
+NY-1006,hudson valley security,UEI_1006,SBE,Excavation
+CA-1007,Golden Gate Demo,UEI_1007,SBE,Demolition
+MI-1008,Motor City Electricaz Corp,UEI_1008,VOSB,Painting
+MA-1009,Bunker Hill Carpentry,UEI_1009,MBE,Carpentry
+NY-1010,Empire Power & Light,UEI_1010,SBE,Electrical
+NJ-1011,Garden State Securty,,DBE,Security
+OR-1012,Stumptown Painting,UEI_1012,WBE,Demolition
+IL-1013,Windy City Dredging Group,,DBE,Security
+CO-1014,Mile High Woodworks,,MBE,Excavation
+WA-1015,Puget Sound Floors,,DBE,Demolition
+CA-1016,Paciific Coast Painting,,MBE,Dredging
+AZ-1017,,UEI_1017,WBE,Plumbing
+OR-1018,Willamette Steel Partners,UEI_1018,SBE,Flooring
+IL-1019,O'Hare Flooring,,SBE,Masonry
+CA-1020,Yerba Buena Flooring,UEI_1020,MBE,HVAC
+MO-1021,Gateway Arch Demolition,,WBE,Masonry
+CO-1022,Front Range Concrete,UEI_1022,WBE,Concrete
+NY-1023,Five Boroughs Demo,,SBE,HVAC
+IL-1024,Calumet Marine & Dredge,,WBE,Landscaping
+WA-1025,Rainier Masonry Inc,,VOSB,Painting
+FL-1026,Magic City Carpentry,UEI_1026,DBE,Roofing
+NJ-1027,Liberty State Landscape,UEI_1027,MBE,Concrete
+MI-1028,8-Mile Mechanical LLC,UEI_1028,MBE,Painting
+NJ-1029,Passaic River Masonry,,SBE,Landscaping
+OR-1030,Burnside Painting,,MBE,Demolition
+AZ-1031,Cactus Plumbing Ltd.,UEI_1031,SBE,Plumbing
+AZ-1032,Camelback Painting Partners,,WBE,Dredging
+MO-1033,Mississippi River Dredging,,SBE,Masonry
+OR-1034,Mount Hood Roofing,UEI_1034,WBE,Electrical
+OR-1035,Salem Masonry Service,,SBE,Carpentry
+GA-1036,Peachtree Excavating,,WBE,Dredging
+NJ-1037,Jersey Shore Concrete,,VOSB,Dredging
+MO-1038,Ozark Landscaping,UEI_1038,SBE,Steel
+AZ-1039,Grand Canyon Carpentry,UEI_1039,DBE,Excavation
+IL-1040,Magnificent Mile Masonry,UEI_1040,VOSB,Masonry
+AZ-1041,Copper State Flooring,,SBE,Flooring
+MI-1042,Motown Masonry Corp.,UEI_1042,VOSB,Masonry
+PA-1043,Keystone HVAC,UEI_1043,VOSB,Painting
+PA-1044,LIBERTY BELL CONCRETE,UEI_1044,SBE,Painting
+CO-1045,Blue River Dredging,,VOSB,Steel
+CA-1046,Silicon Valley HVAC,,VOSB,Concrete
+OR-1047,,,DBE,Security
+MA-1048,FREEDOM TRAIL ELEC,UEI_1048,VOSB,Electrical
+CA-1049,San Diego Steel,UEI_1049,SBE,Roofing
+MI-1050,Woodward Flooring,UEI_1050,WBE,Concrete
+NY-1051,Tri-State Security,UEI_1051,VOSB,Roofing
+CO-1052,Rocky Mountain HVAC,,DBE,Dredging
+OR-1053,Beaver State Plumbing,UEI_1053,VOSB,Demolition
+MI-1054,Lakeshore Landscaping,UEI_1054,SBE,Steel
+PA-1055,Allegheny Painting,UEI_1055,SBE,Concrete
+CA-1056,Hollywood HVAC LLC,,VOSB,Excavation
+AZ-1057,Desert Dredging,UEI_1057,DBE,Dredging
+TX-1058,LONE STAR PLUMBING,,VOSB,Flooring
+CA-1059,Presidio Masonry,UEI_1059,SBE,Security
+FL-1060,Biscayne Security,UEI_1060,SBE,Painting
+NJ-1061,Passaic Carpentry,UEI_1061,DBE,Painting
+PA-1062,Rittenhouse Floor Co.,UEI_1062,DBE,Security
+TX-1063,Austin Dredging Partners,UEI_1063,WBE,Carpentry
+WA-1064,Soundview HVAC,,VOSB,Electrical
+IL-1065,Midway Concrete,UEI_1065,MBE,Steel
+CA-1066,Beverly Hills Elec,UEI_1066,VOSB,Landscaping
+IL-1067,O'Hare Flooring Group,UEI_1067,WBE,HVAC
+NJ-1068,Newark Masonry & Stone,UEI_1068,VOSB,HVAC
+NY-1069,Manhattan Security Services,,VOSB,Masonry
+MI-1070,Grand River Roofing,,VOSB,Plumbing
+MA-1071,Old North Steel,UEI_1071,DBE,Flooring
+WA-1072,Tacoma Masonry,,MBE,Plumbing
+CO-1073,Boulder Landscape,,VOSB,Flooring
+FL-1074,Tampa Bay Plumbing,,VOSB,Excavation
+WA-1075,Olympic Carpentry,,WBE,HVAC
+GA-1076,Buckhead Demo,,VOSB,Painting
+WA-1077,Spokane Steel Ltd,,DBE,Landscaping
+MA-1100,Faneuil Flooring,UEI_1100,VOSB,Steel
+IL-1101,Michigan Ave Steel,UEI_1101,VOSB,Masonry
+NJ-1102,Jersey City Landscape,,WBE,Dredging
+CA-1103,Napa Valley Dredge,,WBE,Painting
+MI-1104,Spartan Masonry,UEI_1104,WBE,Concrete
+MO-1105,Soulard Roofing,UEI_1105,MBE,Concrete
+AZ-1106,Tempe Carpentry Ltd,UEI_1106,WBE,Steel
+AZ-1107,Scottsdale Demolition,,WBE,Security
+AZ-1108,Papago Electrical,UEI_1108,MBE,Steel
+PA-1109,Keystone Roofing Partners,UEI_1109,MBE,Steel
+NY-1110,CENTRAL PARK LANDSCAPE,UEI_1110,DBE,Concrete
+MO-1111,Forest Park Carpentry,UEI_1111,VOSB,Roofing
+TX-1112,Alamo Carpentry Inc.,,VOSB,Flooring
+PA-1113,Broad St Plumbing,,WBE,Concrete
+MO-1114,Dogtown Painting Group,UEI_1114,DBE,Landscaping
+CO-1115,Arapahoe Steel,UEI_1115,WBE,Security
+CA-1116,Mission District Carpentry,,DBE,Concrete
+IL-1117,Wrigley Field Dredging,UEI_1117,SBE,Carpentry
+TX-1118,Lone Star Marine Dredge,,MBE,Concrete
+PA-1119,Main Line Landscaping,UEI_1119,DBE,Concrete
+FL-1120,Little Havana Carpentry,UEI_1120,VOSB,Carpentry
+IL-1121,South Side Roofing,,SBE,Dredging
+MI-1122,Grand River Securty,,DBE,Plumbing
+PA-1123,Brotherly Love Landscape,,MBE,Flooring
+NY-1124,Five Boroughs Security,,VOSB,Excavation
+AZ-1125,Grand Canyon Excavation,UEI_1125,WBE,Flooring
+CO-1126,Centennial Roofing,,DBE,Carpentry
+AZ-1127,Mesa Security Ltd,,WBE,Roofing
+MA-1128,Fenway Excavation,UEI_1128,MBE,HVAC
+FL-1129,Palm Beach Steel,UEI_1129,MBE,Demolition
+GA-1130,Buckhead Masonry,UEI_1130,WBE,Demolition
+GA-1131,Fulton County Demo,UEI_1131,VOSB,HVAC
+MO-1132,Gateway Painting LLC,,MBE,Dredging
+NJ-1133,Ironbound Demolition,UEI_1133,WBE,Excavation
+OR-1134,Lloyd District Demo,,DBE,Roofing
+PA-1135,Rittenhouse Roofing,UEI_1135,WBE,Electrical
+TX-1136,Travis County Dredge,UEI_1136,SBE,Excavation
+WA-1137,Ballard Concrete LLC,UEI_1137,MBE,Concrete
+FL-1138,Coral Gables Excavating,UEI_1138,WBE,HVAC
+WA-1139,Capitol Hill Carpentry,UEI_1139,SBE,Carpentry
+IL-1140,Hyde Park Landscape,UEI_1140,MBE,Concrete
+OR-1141,Pearl District Security,UEI_1141,WBE,Demolition
+WA-1142,Queen Anne Painting,UEI_1142,SBE,Excavation
+NJ-1143,Newark Demo Ltd,UEI_1143,WBE,Plumbing
+NJ-1144,Hoboken Concrete & Co,UEI_1144,DBE,Dredging
+WA-1145,Fremont Security,UEI_1145,SBE,Electrical
+NY-1146,Lower East Side Excavation,UEI_1146,MBE,Electrical
+MI-1147,Cass Corridor Concrete,UEI_1147,VOSB,Painting
+OR-1148,Sellwood Carpentry,UEI_1148,WBE,Electrical
+MI-1149,Corktown Roofing,UEI_1149,VOSB,Painting
