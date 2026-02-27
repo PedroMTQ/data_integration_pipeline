@@ -1,11 +1,11 @@
 import numpy as np
 import pyarrow as pa
 import heapq
-from typing import List, Iterable, Union
-from collections import defaultdict
-from data_integration_pipeline.io.file_reader import S3FileReader
+from typing import Iterable
 from data_integration_pipeline.io.logger import logger
 import polars as pl
+from data_integration_pipeline.io.delta_client import DeltaClient
+from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 
 
 class S3WeightedParquetSampler:
@@ -46,14 +46,17 @@ class S3WeightedParquetSampler:
 
     def __init__(
         self,
-        data: Iterable[pa.Table],
+        s3_path: str,
         weight_column: str,
         weights: dict = {},
         target_total_rows: int = 1000,
         default_weight: float = 1.0,
         batch_size: int = 1000,
     ):
-        self.data: Iterable[pa.Table] = data
+        self.data_model = ModelMapper.get_data_model(s3_path)
+        self.upsert_key = self.data_model._upsert_key
+        self.delta_client = DeltaClient()
+        self.s3_path = s3_path
         self.weight_column = weight_column
         self.weights = weights
         self.default_weight = default_weight
@@ -81,96 +84,50 @@ class S3WeightedParquetSampler:
         """Streams and samples using Polars for vectorized math and distribution."""
         if self._is_sampled:
             return
-        current_file_row_offset = 0
-        for table in self.data:
-            df = pl.from_arrow(table).with_row_index("_local_idx")
+        data = self.delta_client.read(table_name=self.s3_path)
+        for table in data:
+            df = pl.from_arrow(table)
 
             batch_counts = df.select(pl.col(self.weight_column).cast(pl.Utf8).value_counts()).unnest(self.weight_column)
             self.raw_counts_list.append(batch_counts)
 
-            df = df.with_columns([pl.col(self.weight_column).replace_strict(self.weights, default=self.default_weight).cast(pl.Float64).alias("_w")]).filter(pl.col("_w") > 0)
+            df = df.with_columns(
+                [pl.col(self.weight_column).replace_strict(self.weights, default=self.default_weight).cast(pl.Float64).alias("_weight")]
+            ).filter(pl.col("_weight") > 0)
             if df.is_empty():
-                current_file_row_offset += table.num_rows
                 continue
-
             num_valid = len(df)
-            scores = np.random.rand(num_valid) ** (1.0 / df["_w"].to_numpy())
-
-
-            indices = df["_local_idx"].to_numpy()
+            scores = np.random.rand(num_valid) ** (1.0 / df["_weight"].to_numpy())
+            keys = df[self.upsert_key].to_list()
             vals = df[self.weight_column].to_list()
-
             for i in range(num_valid):
-                self.counter += 1  # Global counter
-                global_row_idx = current_file_row_offset + indices[i]
-
+                self.counter += 1  # Tie-breaker
+                # Record structure: (score, counter, business_id, original_weight_val)
+                new_entry = (scores[i], self.counter, keys[i], vals[i])
                 if len(self.heap) < self.target_total_rows:
-                    heapq.heappush(self.heap, (scores[i], self.counter, s3_path, global_row_idx, vals[i]))
+                    heapq.heappush(self.heap, new_entry)
                 elif scores[i] > self.heap[0][0]:
-                    heapq.heapreplace(self.heap, (scores[i], self.counter, s3_path, global_row_idx, vals[i]))
+                    heapq.heapreplace(self.heap, new_entry)
 
-            current_file_row_offset += table.num_rows
         self._is_sampled = True
 
     def get_data(self) -> Iterable[pa.Table]:
         """
-        Gathers winning rows from S3 by streaming batches.
-        Avoids loading full files into memory by filtering per-batch.
+        Retrieves the winning records from the Delta Table using the stored keys.
         """
-        self._sample_from_s3()
         if not self.heap:
-            return
-        # 1. Group winners by path
-        winners_by_path = defaultdict(list)
-        for _, _, path, r_idx, _ in self.heap:
-            winners_by_path[path].append(r_idx)
-
-        for path, row_indexes in winners_by_path.items():
-            # Sort indexes to make streaming extraction easier
-            row_indexes.sort()
-
-            logger.info(f"Gathering {len(row_indexes)} rows from {path}")
-
-            with S3FileReader(path, bucket_name=self.bucket_name, as_table=True) as reader:
-                current_offset = 0
-                collected_batches = []
-
-                for batch_table in reader:
-                    batch_len = len(batch_table)
-                    batch_end = current_offset + batch_len
-
-                    # Find which winning indexes fall within this specific batch
-                    # This is much faster than checking every index in a loop
-                    batch_winners = [idx - current_offset for idx in row_indexes if current_offset <= idx < batch_end]
-
-                    if batch_winners:
-                        # Use Polars for a zero-copy 'gather' on just this batch
-                        # This avoids converting the whole batch to a dict
-                        chunk = pl.from_arrow(batch_table)[batch_winners].to_arrow()
-                        collected_batches.append(chunk)
-
-                    current_offset = batch_end
-
-                    # Optimization: If we found all winners for this file, stop reading early
-                    if current_offset > row_indexes[-1]:
-                        break
-
-                if not collected_batches:
-                    continue
-
-                # Merge the tiny collected chunks into one table for this file
-                file_sample = pa.concat_tables(collected_batches)
-
-                # Yield in the requested batch_size (zero-copy slice)
-                for i in range(0, file_sample.num_rows, self.batch_size):
-                    yield file_sample.slice(i, self.batch_size)
+            self._sample_from_s3()
+        # 1. Extract the winning IDs from the heap
+        winning_ids = [item[2] for item in self.heap]
+        # 2. Use Delta/PyArrow Dataset to fetch ONLY those rows
+        return self.delta_client.read(table_name=self.s3_path, keys=winning_ids, key_column=self.upsert_key)
 
     def get_sample_data_distribution(self) -> dict[str, int]:
         """Returns distribution using the scalar values cached in the heap."""
         if not self._is_sampled:
             self._sample_from_s3()
         dist = {}
-        for _, _, _, _, val in self.heap:
+        for _, _, _, val in self.heap:
             key = str(val) if val is not None else "None"
             dist[key] = dist.get(key, 0) + 1
         return dict(sorted(dist.items(), key=lambda x: x[1], reverse=True))
@@ -222,11 +179,10 @@ class S3WeightedParquetSampler:
 
 
 if __name__ == "__main__":
-    s3_path = "silver/business_entity_registry/business_entity_registry.parquet"
+    s3_path = "silver/business_entity_registry/business_entity_registry.delta"
 
     s3_sampler = S3WeightedParquetSampler(
         s3_path=s3_path,
-        bucket_name="data",
         weight_column="city",
         weights={"NEW YORK": 50.0},
         default_weight=1,

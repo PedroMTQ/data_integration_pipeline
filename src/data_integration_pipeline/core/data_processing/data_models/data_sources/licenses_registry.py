@@ -57,7 +57,7 @@ class ModelCompanyName(BaseModelCompanyName):
 
 class Record(BaseRecord):
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
-    _data_source: ClassVar[str] = "business_entitlicenses_registryy_registry"
+    _data_source: ClassVar[str] = "licenses_registry"
     _upsert_key: ClassVar[str] = "license_id"
     _partition_key: ClassVar[str] = "city"
 

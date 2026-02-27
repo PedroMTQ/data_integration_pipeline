@@ -8,7 +8,6 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources imp
 from data_integration_pipeline.core.audits.expectation_data_model import ModelExpectationTemplate
 from data_integration_pipeline.core.audits.data_auditor import DataAuditor
 from data_integration_pipeline.io.s3_client import S3Client
-from data_integration_pipeline.io.delta_client import DeltaClient
 from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DATA_BUCKET
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3WeightedParquetSampler
@@ -17,7 +16,6 @@ from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3Wei
 class AuditSilverDataJob:
     def __init__(self):
         self.s3_client = S3Client(bucket_name=DATA_BUCKET)
-        self.delta_client = DeltaClient()
 
     def run(self) -> bool:
         additional_rules = (
@@ -45,9 +43,8 @@ class AuditSilverDataJob:
         }
         for silver_s3_path in self.s3_client.get_delta_tables(prefix=SILVER_DATA_FOLDER):
             data_model = ModelMapper.get_data_model(silver_s3_path)
-            data = self.delta_client.read(table_name=silver_s3_path)
             s3_sampler = S3WeightedParquetSampler(
-                data=data,
+                s3_path=silver_s3_path,
                 weight_column=weight_column_mapping[data_model],
                 target_total_rows=1000,
             )

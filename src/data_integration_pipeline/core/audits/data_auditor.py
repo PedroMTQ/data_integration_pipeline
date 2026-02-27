@@ -5,13 +5,14 @@ from typing import Any, Iterable, Type, Literal
 import great_expectations as gx
 import pyarrow as pa
 from data_integration_pipeline.io.logger import logger
-from pydantic import BaseModel
 from data_integration_pipeline.core.audits.expectation_data_model import (
     ModelExpectation,
     ModelExpectationTemplate,
 )
 from data_integration_pipeline.settings import TEMP
-from data_integration_pipeline.core.schema_converter import PyarrowSchemaGenerator
+from data_integration_pipeline.core.data_processing.data_models.data_sources import (
+    BaseRecordType,
+)
 
 
 class DataAuditor:
@@ -20,12 +21,11 @@ class DataAuditor:
 
     def __init__(
         self,
-        data_model: Type[BaseModel],
+        data_model: Type[BaseRecordType],
         dataset_stage: Literal["bronze", "silver", "gold"],
         additional_rules: list[dict] = None,
         rebuild_suite: bool = True,
     ):
-        self.audit_columns = PyarrowSchemaGenerator(data_model.schema).run().names
         self.audit_columns = data_model._pa_schema.names
         self.additional_rules = additional_rules
         self._rebuild_suite = rebuild_suite

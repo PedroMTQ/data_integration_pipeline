@@ -2,13 +2,11 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources imp
     LicensesRegistryRecord,
     BusinessEntityRegistryRecord,
     SubContractorsRegistryRecord,
-    BaseRecord,
+    BaseRecordType,
 )
 import re
 from pathlib import Path
-from typing import Type, TypeVar
-
-BaseRecordType = TypeVar("BaseRecord", bound=BaseRecord)
+from typing import Type
 
 
 class ModelMapper:

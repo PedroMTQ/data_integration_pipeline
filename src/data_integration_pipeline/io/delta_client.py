@@ -103,15 +103,21 @@ class DeltaClient:
         )
         logger.info(f"Upserted batch into {s3_path}.")
 
-    def read(self, table_name: str, columns: list = None, version: Union[int, datetime] = None) -> Iterable[pa.Table]:
+    def read(self, table_name: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None) -> Iterable[pa.Table]:
+        """
+        Unified read method using Polars.
+        Handles fragmentation by re-batching and lookups via predicate pushdown.
+        """
+        if key_column or keys:
+            if not (key_column and keys):
+                raise Exception(f'When filtering data, you need to provide the keys and key_column') 
         uri = self._get_uri(table_name)
         lf = pl.scan_delta(uri, storage_options=self.storage_options, version=version)
         if columns:
             lf = lf.select(columns)
-        # collect() will merge all small Parquet fragments into one unified memory block
+        if keys:
+            lf = lf.filter(pl.col(key_column).is_in(keys))
         df = lf.collect()
-        # If you want to yield it in specific chunks (e.g., 10,000 rows at a time)
-        # This prevents the (1, 10) fragment issue.
         for sub_df in df.iter_slices(n_rows=self.batch_size):
             yield sub_df.to_arrow()
 

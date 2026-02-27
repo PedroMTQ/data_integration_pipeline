@@ -5,20 +5,11 @@ import uuid
 from decimal import Decimal
 from enum import EnumMeta
 from typing import Any, List, Literal, NamedTuple, Optional, Type, TypeVar, Union, cast
-from data_integration_pipeline.core.data_processing.model_mapper import BaseRecordType
 
 import pyarrow as pa  # type: ignore
 from annotated_types import Ge, Gt
 from pydantic import AwareDatetime, BaseModel, NaiveDatetime
 from typing_extensions import Annotated, get_args, get_origin
-from data_integration_pipeline.settings import (
-    FOREIGN_KEY_COLUMN,
-    HASH_DIFF_COLUMN,
-    LDTS_COLUMN,
-    NATURAL_KEY_COLUMN,
-    PRIMARY_KEY_COLUMN,
-    SOURCE_KEY_COLUMN,
-)
 
 
 BaseModelType = TypeVar("BaseModelType", bound=BaseModel)
@@ -266,7 +257,7 @@ def _get_pyarrow_schema(
 class PyarrowSchemaGenerator:
     def __init__(
         self,
-        data_model: Type[BaseRecordType],
+        data_model,
         allow_losing_tz: bool = False,
         exclude_fields: bool = False,
         by_alias: bool = False,
@@ -296,114 +287,6 @@ class PyarrowSchemaGenerator:
         return _get_pyarrow_schema(self.data_model, settings)
 
 
-class VaultSchemaGenerator:
-    def __init__(
-        self,
-        model: Type[BaseModel],
-        allow_losing_tz: bool = False,
-        exclude_fields: bool = False,
-        by_alias: bool = False,
-    ):
-        self.model = model
-        self.settings = Settings(
-            allow_losing_tz=allow_losing_tz,
-            by_alias=by_alias,
-            exclude_fields=exclude_fields,
-        )
-        self.fields = model.model_fields
-
-    def generate_hub_schema(self) -> pa.Schema:
-        """Standard Hub Schema using your settings constants."""
-        return pa.schema(
-            [
-                (PRIMARY_KEY_COLUMN, pa.string()),
-                (NATURAL_KEY_COLUMN, pa.string()),
-                (SOURCE_KEY_COLUMN, pa.string()),
-                (LDTS_COLUMN, pa.timestamp("ms", tz="UTC")),
-            ]
-        )
-
-    def generate_link_schema(self, link_meta: Link) -> pa.Schema:
-        """
-        Uses the role logic from your Link class to define FK columns.
-        """
-        fields = [(PRIMARY_KEY_COLUMN, pa.string())]
-
-        # Handle Self-Referencing logic based on your class attributes
-        if link_meta.local_hub_name == link_meta.remote_hub_name:
-            fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.local_hub_name}_{link_meta.local_role}", pa.string()))
-            fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.remote_hub_name}_{link_meta.remote_role}", pa.string()))
-        else:
-            fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.local_hub_name}", pa.string()))
-            fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.remote_hub_name}", pa.string()))
-
-        fields.extend([(SOURCE_KEY_COLUMN, pa.string()), (LDTS_COLUMN, pa.timestamp("ms", tz="UTC"))])
-        return pa.schema(fields)
-
-    def generate_satellite_schema(self, satellite_name: str) -> pa.Schema:
-        """
-        Builds schema for a satellite. Note: satellite_name here
-        should match the 'self.name' after your class prefixes it.
-        """
-        fields = [
-            (PRIMARY_KEY_COLUMN, pa.string()),
-            (HASH_DIFF_COLUMN, pa.string()),
-        ]
-
-        # Filter fields that belong to this specific satellite
-        for name, field_info in self.fields.items():
-            # Check if any satellite tag matches the requested table name
-            sat_tag = next(
-                (m for m in field_info.metadata if isinstance(m, Satellite) and m.name == satellite_name),
-                None,
-            )
-
-            if sat_tag:
-                # Use your existing robust _get_pyarrow_type engine
-                pa_type = _get_pyarrow_type(field_info.annotation, field_info.metadata, self.settings)
-                nullable = _is_optional(field_info.annotation)
-                fields.append(pa.field(name, pa_type, nullable=nullable))
-
-        fields.extend([(LDTS_COLUMN, pa.timestamp("ms", tz="UTC")), (SOURCE_KEY_COLUMN, pa.string())])
-        return pa.schema(fields)
-
-    def run(self) -> dict[str, pa.Schema]:
-        """
-        Scans the CompanyRecordPyarrowSchema directly to build
-        all physical Data Vault tables.
-        """
-        schemas: dict[str, pa.Schema] = {}
-        processed_hubs: set[str] = set()
-        processed_links: set[str] = set()
-        processed_sats: set[str] = set()
-
-        for _, field_info in self.fields.items():
-            for meta in field_info.metadata:
-                # 1. Hubs
-                if isinstance(meta, Hub) and meta.name not in processed_hubs:
-                    schemas[meta.name] = self.generate_hub_schema()
-                    processed_hubs.add(meta.name)
-
-                # 2. Links (and implicit Link Satellites)
-                elif isinstance(meta, Link) and meta.name not in processed_links:
-                    schemas[meta.name] = self.generate_link_schema(meta)
-                    processed_links.add(meta.name)
-
-                    if meta.metadata:
-                        # Follows sat_lnk_... naming convention
-                        link_sat_name = f"sat_{meta.name}"
-                        if link_sat_name not in processed_sats:
-                            schemas[link_sat_name] = self.generate_satellite_schema(link_sat_name)
-                            processed_sats.add(link_sat_name)
-
-                # 3. Hub Satellites
-                elif isinstance(meta, Satellite) and meta.name not in processed_sats:
-                    schemas[meta.name] = self.generate_satellite_schema(meta.name)
-                    processed_sats.add(meta.name)
-
-        return schemas
-
-
 if __name__ == "__main__":
     from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 
@@ -412,8 +295,3 @@ if __name__ == "__main__":
 
     pyarrow_schema = PyarrowSchemaGenerator(data_model.schema).run()
     print(pyarrow_schema)
-    # schemas = VaultSchemaGenerator(data_model.schema).run()
-    # for table, shema in schemas.items():
-    #     print(table)
-    #     print(shema)
-    #     print("\n")

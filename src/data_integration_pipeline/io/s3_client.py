@@ -72,13 +72,13 @@ class S3Client:
 
     def get_delta_tables(self, prefix: str) -> list[str]:
         """
-        Returns a list of unique Delta table root paths (ending in .delta) 
+        Returns a list of unique Delta table root paths (ending in .delta)
         found under the given prefix.
         """
         delta_roots = set()
         try:
             # Use a paginator in case you have thousands of files
-            paginator = self.__client.get_paginator('list_objects_v2')
+            paginator = self.__client.get_paginator("list_objects_v2")
             pages = paginator.paginate(Bucket=self.bucket_name, Prefix=prefix)
             for page in pages:
                 for obj in page.get("Contents", []):
@@ -91,7 +91,7 @@ class S3Client:
                         for i, part in enumerate(parts):
                             if part.endswith(".delta"):
                                 # Reconstruct the path up to the .delta folder
-                                root_path = "/".join(parts[:i + 1])
+                                root_path = "/".join(parts[: i + 1])
                                 delta_roots.add(root_path)
                                 break
         except Exception as e:

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import ClassVar
+from typing import ClassVar, TypeVar
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
 
 from data_integration_pipeline.core.schema_converter import PyarrowSchemaGenerator
@@ -28,3 +28,6 @@ class BaseRecord(BaseModel):
             if not hasattr(cls, attr):
                 raise TypeError(f"Class {cls.__name__} must define a unique <{attr}> ClassVar.")
         cls._pa_schema = PyarrowSchemaGenerator(cls._record_schema).run()
+
+
+BaseRecordType = TypeVar("BaseRecord", bound=BaseRecord)
