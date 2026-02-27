@@ -1,5 +1,5 @@
 from data_integration_pipeline.io.s3_client import S3Client
-from data_integration_pipeline.settings import DATA_BUCKET, TESTS_DATA, BRONZE_DATA_FOLDER
+from data_integration_pipeline.settings import TESTS_DATA, BRONZE_DATA_FOLDER
 import os
 from pathlib import Path
 from data_integration_pipeline.io.logger import logger
@@ -7,7 +7,7 @@ from data_integration_pipeline.io.logger import logger
 
 class UploadBronzeJob:
     def __init__(self):
-        self.s3_client = S3Client(bucket_name=DATA_BUCKET)
+        self.s3_client = S3Client()
 
     def run(self):
         for file in os.listdir(TESTS_DATA):

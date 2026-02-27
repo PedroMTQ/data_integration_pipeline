@@ -12,10 +12,11 @@ from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DATA_BUCKET, 
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3WeightedParquetSampler
 
+from data_integration_pipeline.io.logger import logger
 
 class AuditSilverDataJob:
     def __init__(self):
-        self.s3_client = S3Client(bucket_name=DATA_BUCKET)
+        self.s3_client = S3Client()
         self.additional_rules = (
             {
                 "patterns": ["entity_id", "vendor_id", "license_id"],
@@ -41,6 +42,7 @@ class AuditSilverDataJob:
         }
 
     def process_data(self, s3_path):
+        logger.info(f'Auditing {s3_path}')
         data_model = ModelMapper.get_data_model(s3_path)
         s3_sampler = S3WeightedParquetSampler(
             s3_path=s3_path,

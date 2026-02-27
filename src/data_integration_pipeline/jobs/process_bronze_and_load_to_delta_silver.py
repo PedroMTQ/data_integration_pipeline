@@ -24,7 +24,7 @@ class ProcessBronzetoSilver:
 
     # we could add a locking mechanism (to avoid racing conditions during parallel work) like in here  https://github.com/PedroMTQ/helical_pdqueiros/blob/main/src/helical_pdqueiros but this is simpler in a POC
     def __init__(self):
-        self.s3_client = S3Client(bucket_name=DATA_BUCKET)
+        self.s3_client = S3Client()
 
     def _flush_buffer(self, writer: DeltaClient, data: list[dict], s3_path: str, data_model: BaseRecordType):
         """Converts the list of dicts to a PyArrow table and writes to Delta."""

@@ -12,6 +12,7 @@ from data_integration_pipeline.settings import (
     S3_WRITE_RETRIES,
     S3_WRITE_RETRY_DELAY,
     S3_WRITE_RETRY_BACKOFF,
+    DATA_BUCKET
 )
 
 from data_integration_pipeline.io.logger import logger
@@ -20,7 +21,7 @@ from data_integration_pipeline.io.logger import logger
 class S3Client:
     def __init__(
         self,
-        bucket_name: str,
+        bucket_name: str=DATA_BUCKET,
         aws_access_key: str = S3_ACCESS_KEY,
         aws_secret_access_key: str = S3_SECRET_ACCESS_KEY,
         s3_endpoint_url: str = S3_ENDPOINT_URL,
@@ -164,7 +165,7 @@ class S3Client:
 
 
 if __name__ == "__main__":
-    client = S3Client(bucket_name="data")
+    client = S3Client()
     # print(client.file_exists('boxes/output/bounding_box_01976a1225ca7e32a2daad543cb4391e.jsonl'))
     # print(client.file_exists("test"))
     print(client.get_delta_tables("silver"))

@@ -250,13 +250,11 @@ if __name__ == "__main__":
     from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
     from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3WeightedParquetSampler
 
-    s3_path = "silver/business_entity_registry/business_entity_registry.parquet"
+    s3_path = "silver/business_entity_registry/business_entity_registry.delta"
     data_model = ModelMapper.get_data_model(s3_path)
     s3_sampler = S3WeightedParquetSampler(
         s3_path=s3_path,
-        bucket_name="data",
         weight_column="city",
-        # weights={"NEW YORK": 50.0},
         default_weight=1,
         target_total_rows=100,
     )
@@ -266,7 +264,7 @@ if __name__ == "__main__":
     print("get_total_sampled_records", s3_sampler.get_total_sampled_records())
     print("get_sample_data_distribution", s3_sampler.get_sample_data_distribution())
     data_auditor = DataAuditor(data_model=data_model, dataset_stage="silver")
-    data_sample = s3_sampler.get_data()
-    results = data_auditor.run(data=data_sample)
-    print(results)
-    data_auditor.export_docs()
+    # data_sample = s3_sampler.gets_data()
+    # results = data_auditor.run(data=data_sample)
+    # print(results)
+    # data_auditor.export_docs()

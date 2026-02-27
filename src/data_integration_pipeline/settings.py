@@ -13,7 +13,8 @@ DATA = os.path.join(ROOT, "data")
 TEMP = os.path.join(ROOT, "tmp")
 TESTS = os.path.join(ROOT, "tests")
 TESTS_DATA = os.path.join(TESTS, "data")
-CONFIGS = os.path.join(ROOT, "confs")
+CONFIG = os.path.join(ROOT, "config")
+ER_SPEC_PATH = os.path.join(CONFIG, 'er_spec.yaml')
 
 with open(PYPROJECT_PATH, "rb") as f:
     data = tomllib.load(f)

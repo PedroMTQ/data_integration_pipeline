@@ -33,8 +33,8 @@
 
 * [x] **Source Mapping Config:** Create a `sources.yaml` that maps the messy headers from your 3 samples to your canonical field names (e.g., `Firm_Name` -> `normalized_company_name`).
 * [x] **Pydantic Canonical Models:** Write the Pydantic classes for `Company` and `License`. Ensure you use `field_validators` to clean data (e.g., stripping white spaces, formatting dates).
-* [ ] **Great Expectations Setup:** Initialize GE and create 3 basic "Suites" that check for null IDs and valid date ranges on your Silver data.
-* [ ] **Processing Script:** Write the Python script that reads the CSV, applies the YAML mapping, runs Pydantic validation, and triggers the GE checkpoint.
+* [x] **Great Expectations Setup:** Initialize GE and create 3 basic "Suites" that check for null IDs and valid date ranges on your Silver data.
+* [x] **Processing Script:** Write the Python script that reads the CSV, applies the YAML mapping, runs Pydantic validation, and triggers the GE checkpoint.
 
 ### Phase 3: Entity Resolution & Vault Prep (Day 2 - AM)
 
@@ -48,29 +48,17 @@
 
 ### Phase 4: The "Gold" Data Vault (Day 2 - PM)
 
-* [ ] **Delta Lake Implementation:** Write the `MERGE` logic using PyArrow/Delta to load:
-* `HUB_COMPANY`: Idempotent load of unique `Golden_ID`.
-* `SAT_COMPANY_SOURCE`: Per-source attributes (City, State, Fed).
-* `LINK_SAME_AS`: The audit trail of which source IDs mapped to which `Golden_ID`.
-
-
 * [ ] **The Business Vault View:** Write a Spark SQL or DuckDB view that joins the Satellites and applies "Survivorship" (e.g., "Use Federal name as the primary name"). **This is your Golden Record.**
 
 ### Phase 5: Orchestration & Polishing (Day 3 - AM)
 
 * [ ] **Airflow DAG Construction:** Build the DAG. Ensure you have clear tasks: `ingest` -> `validate` -> `run_er` -> `load_vault` -> `refresh_gold_view`.
-* [ ] **Audit Logging:** Add print statements or logs in your DAG that show how many records were "Quarantined" vs "Loaded."
+* [x] **Audit Logging:** Add print statements or logs in your DAG that show how many records were "Quarantined" vs "Loaded."
 * [ ] **README.md (Crucial):**
 * Draw the architecture diagram (use Mermaid.js or an image).
 * Explain **why** you chose Data Vault 2.0 (Auditability, Traceability).
 * Explain the **Dynamic Pydantic Converter** as a scaling framework.
 
-
-
-### Phase 6: The "Knockout" Delivery (Day 3 - PM)
-
-* [ ] **Record a Demo:** Record a 2-minute Loom video. Show the Airflow DAG running successfully and then query the "Golden Record" to show "Elite Electrical" merged across 3 sources.
-* [ ] **The Pitch:** Draft your message to the hiring manager. Focus on: *"I wanted to show how I solve the specific business problem of registry data trust at scale."*
 
 
 
