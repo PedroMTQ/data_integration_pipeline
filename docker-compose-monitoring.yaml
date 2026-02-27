@@ -1,0 +1,83 @@
+services:
+
+  prometheus:
+    container_name: monitoring-prometheus
+    image: prom/prometheus:latest
+    networks:
+      - data-integration-network
+    restart: unless-stopped
+    ports:
+      - 9090:9090
+    user: '0'
+    volumes:
+      - ./config/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./data/prometheus/:/prometheus
+    command:
+      - '--web.enable-lifecycle'
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-admin-api'
+    depends_on:
+      - pushgateway
+  
+  # for ephemeral jobs, i.e., DAGs
+  pushgateway:
+    container_name: monitoring-pushgateway
+    image: prom/pushgateway
+    networks:
+      - data-integration-network
+    ports:
+      - 9091:9091
+
+
+  grafana:
+    container_name: monitoring-grafana
+    networks:
+      - data-integration-network
+    image: grafana/grafana-oss
+    restart: unless-stopped
+    ports:
+     - 3000:3000
+    user: '0'
+    volumes:
+      - ./data/grafana/data:/var/lib/grafana
+      - ./config/monitoring/recipes/:/var/lib/grafana/dashboards
+      - ./config/monitoring/provisioning/main.yaml:/etc/grafana/provisioning/dashboards/main.yaml
+      - ./config/monitoring/provisioning/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml
+    depends_on:
+      - prometheus
+
+  otel-collector:
+    user: '0'
+    container_name: monitoring-otel-collector
+    networks:
+      - data-integration-network
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+
+  mailhog:
+    container_name: monitoring-mailhog
+    networks:
+    - data-integration-network
+    image: mailhog/mailhog
+    logging:
+      driver: 'none'  # disable saving logs
+    ports:
+      - 1025:1025 # smtp server
+      - 8025:8025 # web ui
+
+
+
+networks:
+  data-integration-network:
+    name: data-integration-network
+    external: true
+

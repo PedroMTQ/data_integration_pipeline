@@ -10,6 +10,7 @@ from data_integration_pipeline.settings import (
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper, BaseRecordType
 from pathlib import Path
 from data_integration_pipeline.io.logger import logger
+from typing import Iterable
 from data_integration_pipeline.io.file_reader import S3FileReader
 from data_integration_pipeline.io.file_writer import S3FileWriter
 from data_integration_pipeline.io.delta_client import DeltaClient
@@ -77,8 +78,9 @@ class ProcessBronzetoSilver:
         if metrics["failures"]:
             logger.warning(f"Wrote {metrics['failures']} invalid rows to {errors_s3_path}")
         self.s3_client.move_file(current_path=bronze_s3_path, new_path=archive_s3_path)
+        return silver_s3_path
 
-    def get_data_to_process(self) -> dict:
+    def get_data_to_process(self) -> Iterable[dict]:
         # this could be distributed processing, but let's keep it simple
         for bronze_s3_path in self.s3_client.get_files(prefix=BRONZE_DATA_FOLDER):
             path_obj = Path(bronze_s3_path)
@@ -92,19 +94,28 @@ class ProcessBronzetoSilver:
             if self.s3_client.file_exists(silver_s3_path):
                 logger.debug(f"{bronze_s3_path} already processed, skipping...")
                 continue
-            return {
+            yield {
                 "bronze_s3_path": bronze_s3_path,
                 "archive_s3_path": archive_s3_path,
                 "silver_s3_path": silver_s3_path,
                 "errors_s3_path": errors_s3_path,
             }
-        logger.debug("No data to process")
 
-    def run(self):
-        task: dict = self.get_data_to_process()
-        if task:
-            self.process_data(**task)
+    def run(self) -> str:
+        '''
+        generic wrapper to run all tasks
+        '''
+        for task in self.get_data_to_process():
+            return self.process_data(**task)
 
+def process_task(task_dict: dict):
+    job = ProcessBronzetoSilver()
+    silver_s3_path = job.process_data(**task_dict)
+    return silver_s3_path
+
+def get_tasks() -> list[dict]:
+    job = ProcessBronzetoSilver()
+    return list(job.get_data_to_process())
 
 if __name__ == "__main__":
     job = ProcessBronzetoSilver()

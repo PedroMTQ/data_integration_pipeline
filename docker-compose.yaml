@@ -1,6 +1,6 @@
 services:
-  repo-template-service:
+  data-integration-service:
     build:
       context: .
       dockerfile: ./Dockerfile
-    image: repo-template-service:latest
+    image: data-integration-service:latest

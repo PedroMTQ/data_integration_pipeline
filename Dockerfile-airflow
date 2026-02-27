@@ -1,0 +1,10 @@
+    FROM apache/airflow:3.1.2
+    # ARG AIRFLOW_UID
+    USER root
+    COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+    RUN uv -V
+    RUN mkdir -p /opt/airflow/config /opt/airflow/app
+    RUN chown -R 1000:0 /opt/airflow/app
+    RUN chown -R 1000:0 /opt/airflow/config
+    USER airflow
+    RUN pip install apache-airflow-providers-docker apache-airflow[otel] apache-airflow-providers-amazon
