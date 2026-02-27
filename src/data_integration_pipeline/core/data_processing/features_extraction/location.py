@@ -19,7 +19,7 @@ class ParsedLocation:
             field_name = field.name
             field_value = getattr(self, field_name)
             if isinstance(field_value, str):
-                setattr(self, field_name, field_value.upper())
+                setattr(self, field_name, field_value.upper().strip())
 
     @classmethod
     def from_scourgify(cls, data: dict) -> "ParsedLocation":
@@ -35,9 +35,7 @@ class ParsedLocation:
 class LocationParser(SingletonBase):
     def __init__(self, parser: Literal["scourgify"] = "scourgify"):
         if hasattr(self, "parser_type"):
-            logger.debug(
-                f"{self.__class__.__name__} singleton already initialized, skipping object creation..."
-            )
+            logger.debug(f"{self.__class__.__name__} singleton already initialized, skipping object creation...")
             return
         self.parser_type = parser
         # You'd probably add better parsers here, there are many trained models for this nowadays, but this is pretty lightweight for a POC
@@ -48,8 +46,12 @@ class LocationParser(SingletonBase):
     def parser_scourgify(address: str) -> ParsedLocation:
         return ParsedLocation.from_scourgify(normalize_address_record(address, long_hand=True))
 
-    def parse(self, address: str) -> dict:
-        return self.parser(address)
+    def parse(self, address: str) -> ParsedLocation:
+        try:
+            return self.parser(address)
+        except Exception as e:
+            logger.error(f'Error parsing address "{address}" due to {e}')
+            return ParsedLocation()
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 from __future__ import annotations
-
+from typing import Optional
 from dataclasses import asdict
 
 from pydantic import (
     BaseModel,
     Field,
-    computed_field,
+    model_validator,
     model_serializer,
 )
 
@@ -23,16 +23,14 @@ ADDRESS_PARSER = LocationParser()
 
 class BaseModelLocation(BaseModel):
     model_config = BASE_CONFIG_DICT
-    location: SoftStr = Field(
-        default=None, description="Location", min_length=MIN_LENGTH_ADDRESS_1, exclude=True
-    )
+    location: SoftStr = Field(default=None, description="Location", min_length=MIN_LENGTH_ADDRESS_1, exclude=True)
+    parsed_address: Optional[dict] = Field(default=None, description="Address parsed from location")
 
-    @computed_field(description="Parsed address")
-    @property
-    def parsed_address(self) -> dict:
-        if self.location:
-            return asdict(ADDRESS_PARSER.parse(self.location))
-        return {}
+    @model_validator(mode="after")
+    def set_parsed_address(self) -> "BaseModelLocation":
+        if self.parsed_address is None and self.location:
+            self.parsed_address = asdict(ADDRESS_PARSER.parse(self.location))
+        return self
 
     @model_serializer(mode="plain")
     def serialize_model(self) -> dict:
@@ -41,6 +39,10 @@ class BaseModelLocation(BaseModel):
 
 if __name__ == "__main__":
     test_address = "124 POWER AVE, SUITE B, alaska"
+    data_model = BaseModelLocation(location=test_address)
+    print(data_model)
+    print(data_model.model_dump())
+    test_address = "DENVER"
     data_model = BaseModelLocation(location=test_address)
     print(data_model)
     print(data_model.model_dump())

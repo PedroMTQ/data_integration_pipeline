@@ -47,9 +47,7 @@ class S3Client:
             logger.error(f"Failed to connect to S3 bucket: {self.bucket_name}")
             raise Exception(f"Error accessing bucket {self.bucket_name} due to: {e}") from e
 
-    def get_files(
-        self, prefix: str, file_name_pattern: str = None, match_on_s3_path: bool = False
-    ) -> list[str]:
+    def get_files(self, prefix: str, file_name_pattern: str = None, match_on_s3_path: bool = False) -> list[str]:
         res = []
         try:
             response = self.__client.list_objects_v2(Bucket=self.bucket_name, Prefix=prefix)
@@ -63,15 +61,44 @@ class S3Client:
             s3_path = obj["Key"]
             if regex_pattern:
                 file_name = Path(s3_path).name
-                if regex_pattern.fullmatch(file_name) or (
-                    match_on_s3_path and regex_pattern.fullmatch(s3_path)
-                ):
+                if regex_pattern.fullmatch(file_name) or (match_on_s3_path and regex_pattern.fullmatch(s3_path)):
                     res.append(s3_path)
                 else:
                     logger.debug(f"File skipped: {s3_path}")
             else:
                 res.append(s3_path)
         logger.debug(f"Files returned from {prefix}: {res}")
+        return res
+
+    def get_delta_tables(self, prefix: str) -> list[str]:
+        """
+        Returns a list of unique Delta table root paths (ending in .delta) 
+        found under the given prefix.
+        """
+        delta_roots = set()
+        try:
+            # Use a paginator in case you have thousands of files
+            paginator = self.__client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=self.bucket_name, Prefix=prefix)
+            for page in pages:
+                for obj in page.get("Contents", []):
+                    s3_path = obj["Key"]
+                    # Check if '.delta' is in the path
+                    if ".delta" in s3_path:
+                        # Logic: Split the path and find the segment ending in .delta
+                        # e.g., 'silver/registry/business.delta/_delta_log/00.json'
+                        parts = s3_path.split("/")
+                        for i, part in enumerate(parts):
+                            if part.endswith(".delta"):
+                                # Reconstruct the path up to the .delta folder
+                                root_path = "/".join(parts[:i + 1])
+                                delta_roots.add(root_path)
+                                break
+        except Exception as e:
+            logger.error(f"Error listing Delta tables: {e}")
+            raise e
+        res = sorted(list(delta_roots))
+        logger.debug(f"Delta tables found under {prefix}: {res}")
         return res
 
     def delete_file(self, s3_path: str) -> bool:
@@ -92,6 +119,7 @@ class S3Client:
             self.__client.delete_object(Bucket=self.bucket_name, Key=current_path)
         except Exception as e:
             logger.exception(f"Failed to move {current_path} to {new_path} due to {e}")
+        logger.info(f"Moved file from {current_path} to {new_path}")
         return new_path
 
     def download_file(self, s3_path: str, output_folder: str) -> str:
@@ -138,5 +166,6 @@ class S3Client:
 if __name__ == "__main__":
     client = S3Client(bucket_name="data")
     # print(client.file_exists('boxes/output/bounding_box_01976a1225ca7e32a2daad543cb4391e.jsonl'))
-    print(client.file_exists("test"))
+    # print(client.file_exists("test"))
+    print(client.get_delta_tables("silver"))
     # print(client.get_files(FIELDS_FOLDER_OUTPUT, file_name_pattern='fields/input/01976dbcbdb77dc4b9b61ba545503b77/fields_2025-06-04-BATCH_2.jsonl', match_on_s3_path=True))

@@ -43,17 +43,19 @@ def get_hash(str_to_encode: str) -> str:
     return hashlib.sha256(std(str_to_encode).encode("utf-8")).hexdigest()
 
 
-def get_hk(source_id: str, source_name: str) -> str:
+def get_hk(source_id: str, id_type: str) -> str:
     """
     Generates a Data Vault 2.0 compliant SHA-256 Hash Key (HK).
     This is the 'Anchor' for your Hub.
+
+    the HK is source type specific, e.g., entity_id||123, this is important to avoid collision of HKs when two sources have the same ID, .e.g, entity_id:123 and other_id:123
     """
-    if not source_id or not source_name:
-        raise Exception("Missing source_id or source_name")
-    s_id = std(source_id)
-    s_name = std(source_name)
+    if not source_id or not id_type:
+        raise Exception("Missing source_id or id_type")
+    source_id_std = std(source_id)
+    id_type_std = std(id_type)
     # Standard DV2.0: Separator prevents '1'+'23' colliding with '12'+'3'
-    anchor_key_id = f"{s_id}||{s_name}"
+    anchor_key_id = f"{source_id_std}||{id_type_std}"
     return get_hash(anchor_key_id)
 
 

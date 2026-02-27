@@ -2,10 +2,13 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources imp
     LicensesRegistryRecord,
     BusinessEntityRegistryRecord,
     SubContractorsRegistryRecord,
+    BaseRecord,
 )
 import re
 from pathlib import Path
-from pydantic import BaseModel
+from typing import Type, TypeVar
+
+BaseRecordType = TypeVar("BaseRecord", bound=BaseRecord)
 
 
 class ModelMapper:
@@ -16,7 +19,7 @@ class ModelMapper:
     }
 
     @staticmethod
-    def get_data_model(file_path: str) -> BaseModel:
+    def get_data_model(file_path: str) -> Type[BaseRecordType]:
         """
         Matches a filename against MAPPINGS and returns the corresponding
         Pydantic model class.

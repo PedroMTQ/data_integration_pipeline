@@ -1,10 +1,9 @@
 from __future__ import annotations
 import os
-from typing import Any, Optional, ClassVar, Annotated
+from typing import Any, Optional, ClassVar
 
 from pydantic import (
     Field,
-    computed_field,
     field_validator,
     model_serializer,
     model_validator,
@@ -24,29 +23,22 @@ from data_integration_pipeline.core.data_processing.data_models.templates.model_
 from data_integration_pipeline.core.data_processing.utils import SoftStr
 from data_integration_pipeline.core.data_processing.mappings import NaicsMapping
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
-from data_integration_pipeline.core.data_vault.templates_data_vault import Hub, Link, Satellite
-from data_integration_pipeline.core.data_processing.data_models.templates.base_vault_record import BaseVaultRecord
+from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
 
 
 NAICS_MAPPING = NaicsMapping()
 
 
-class VaultRecord(BaseVaultRecord):
-    license_id: Annotated[
-        Optional[str],
-        Hub(record_source="licenses_registry", name="licenses"),
-        Satellite(name="identifiers", hub_name="licenses"),
-    ] = Field(default=None)
-
-    company_name: Annotated[str, Satellite(name="names", hub_name="licenses")] = Field(validation_alias=AliasPath('company_name', 'company_name'))
-    company_name_normalized: Annotated[Optional[str], Satellite(name="names", hub_name="licensess")] = Field(default=None, validation_alias=AliasPath('company_name', 'company_name_normalized'))
-
-    address_1: Annotated[Optional[str], Satellite(name="location", hub_name="licenses")] = Field(default=None, validation_alias=AliasPath('location', 'address_1'))
-    city: Annotated[Optional[str], Satellite(name="location", hub_name="licenses")] = Field(default=None, validation_alias=AliasPath('location', 'city'))
-
-
-    naics_code: Annotated[Optional[str], Satellite(name="descriptions", hub_name="licenses")] = Field(default=None)
-    expiration_date: Annotated[str, Satellite(name="status", hub_name="licenses")] = Field(default=True)
+class SchemaRecord(BaseSchema):
+    license_id: str
+    company_name: str = Field(validation_alias=AliasPath("company_name", "company_name"))
+    company_name_normalized: Optional[str] = Field(default=None, validation_alias=AliasPath("company_name", "company_name_normalized"))
+    address_1: Optional[str]
+    postal_code: Optional[str]
+    city: Optional[str]
+    naics_code: Optional[str]
+    naics_code_label: Optional[str]
+    expiration_date: Optional[ModelDate]
 
 
 class ModelLocation(BaseModelLocation):
@@ -64,18 +56,17 @@ class ModelCompanyName(BaseModelCompanyName):
 
 
 class Record(BaseRecord):
-    data_source: ClassVar[str] = "licenses_registry"
-    schema: ClassVar[BaseVaultRecord] = VaultRecord
+    _record_schema: ClassVar[BaseSchema] = SchemaRecord
+    _data_source: ClassVar[str] = "business_entitlicenses_registryy_registry"
+    _upsert_key: ClassVar[str] = "license_id"
+    _partition_key: ClassVar[str] = "city"
 
     license_id: str = Field(alias="LICENSE_NUM", description="License number for the company")
     company_name: ModelCompanyName
     location: ModelLocation
-    naics_code: Optional[str] = Field(
-        default=None, alias="NAICS CODE", description="NAIC classification code"
-    )
-    expiration_date: Optional[ModelDate] = Field(
-        default=None, alias="CERT_EXPIRY_DATE", description="Expiration date of the license"
-    )
+    naics_code: Optional[str] = Field(default=None, alias="NAICS CODE", description="NAIC classification code")
+    naics_code_label: Optional[str] = Field(default=None, description="NAIC classification code label")
+    expiration_date: Optional[ModelDate] = Field(default=None, alias="CERT_EXPIRY_DATE", description="Expiration date of the license")
 
     @model_validator(mode="before")
     @classmethod
@@ -107,19 +98,23 @@ class Record(BaseRecord):
             return None
         return value
 
-    @computed_field(description="NAIC classification description")
-    @property
-    def naics_code_label(self) -> Optional[str]:
-        return NAICS_MAPPING.get_label(self.naics_code)
+    @model_validator(mode="after")
+    def set_naics_label(self) -> "Record":
+        # If is_active wasn't provided in the input, calculate it
+        if self.naics_code_label is None and self.naics_code:
+            self.naics_code_label = NAICS_MAPPING.get_label(self.naics_code)
+        return self
 
     @model_serializer(mode="plain")
     def serialize_model(self):
         return {
+            "data_source": self._data_source,
             "license_id": self.license_id,
             **self.company_name.model_dump(),
             "naics_code": self.naics_code,
             "naics_code_label": self.naics_code_label,
             **self.location.model_dump(),
+            "expiration_date": self.expiration_date.model_dump() if self.expiration_date else None,
         }
 
 

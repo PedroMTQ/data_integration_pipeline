@@ -17,6 +17,7 @@ from pyarrow import csv as pa_csv
 class FileReader:
     _file_handle = None
     _file_path = None
+    _generator = None
 
     def __init__(self, as_table: bool = False):
         self.as_table = as_table
@@ -27,11 +28,18 @@ class FileReader:
         """
         extension = Path(self._file_path).suffix.lower()
         if extension == ".csv":
-            yield from self._read_csv()
+            self._generator = self._read_csv()
         elif extension == ".parquet":
-            yield from self._read_parquet()
+            self._generator = self._read_parquet()
         else:
             raise ValueError(f"Unsupported file extension: {extension}")
+        return self._generator
+
+    def __next__(self):
+        # This allows next(reader) to work
+        if self._generator is None:
+            iter(self)  # Initialize the generator
+        return next(self._generator)
 
     def __enter__(self):
         return self
@@ -91,9 +99,7 @@ class S3FileReader(FileReader):
             s3_path = f"s3://{self.bucket_name}/{s3_path}"
         self._file_path = s3_path
         # Initialize s3fs with your specific credentials/endpoint
-        self.fs = s3fs.S3FileSystem(
-            key=aws_access_key, secret=aws_secret_access_key, client_kwargs={"endpoint_url": s3_endpoint_url}
-        )
+        self.fs = s3fs.S3FileSystem(key=aws_access_key, secret=aws_secret_access_key, client_kwargs={"endpoint_url": s3_endpoint_url})
 
     def _read_csv(self) -> Iterable[Union[dict, pa.Table]]:
         if self.as_table:
@@ -120,9 +126,12 @@ class S3FileReader(FileReader):
 
 
 if __name__ == "__main__":
-    file_path = "/home/pedroq/personal/data_integration_pipeline/tests/data/business_entity_registry.csv"
-    for row in LocalFileReader(file_path, as_table=True):
-        print(row)
+    # file_path = "/home/pedroq/workspace/data_integration_pipeline/tests/data/business_entity_registry.csv"
+    # for table in LocalFileReader(file_path, as_table=True):
+    #     print(table.shape)
+    # for row in LocalFileReader(file_path, as_table=False):
+    #     print(row)
+    #     break
     s3_path = "bronze/business_entity_registry/business_entity_registry.csv"
-    for row in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
-        print(row)
+    for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
+        print(table.shape)

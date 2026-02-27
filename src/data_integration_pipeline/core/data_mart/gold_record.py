@@ -5,13 +5,19 @@ from typing import Annotated, Any, ClassVar, Optional
 from pydantic import (
     BaseModel,
     ConfigDict,
+    field_validator,
     Field,
     model_serializer,
     model_validator,
 )
+from data_integration_pipeline.core.data_processing.mappings import NaicsMapping
 
 from data_integration_pipeline.core.data_vault.templates_data_vault import Hub, Link, Satellite
-from data_integration_pipeline.core.data_processing.data_models.templates.base_vault_record import BaseVaultRecord
+from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import (
+    BaseVaultRecord,
+)
+
+NAICS_MAPPING = NaicsMapping()
 
 
 class GoldenCompanyPyarrowSchema(BaseVaultRecord):
@@ -22,11 +28,11 @@ class GoldenCompanyPyarrowSchema(BaseVaultRecord):
     # --- IDENTIFIERS (HUB & LINKS) ---
 
     # Primary Golden Hub (from business entity registry)
-    entity_id: Annotated[str, Hub(record_source="entity_regitry", name="entities", is_primary=True)] = Field()
+    entity_id: Annotated[str, Hub(name="entities", is_primary=True)] = Field()
     # Link to Vendor Hub (from subcontractors registry)
     vendor_id: Annotated[
         Optional[str],
-        Hub(record_source="subcontractors_registry", name="vendors"),
+        Hub(name="vendors"),
         Link(
             name="company_to_vendor",
             local_hub_name="companies",
@@ -39,7 +45,7 @@ class GoldenCompanyPyarrowSchema(BaseVaultRecord):
     # Link to License Hub (from licenses registry)
     license_id: Annotated[
         Optional[str],
-        Hub(record_source="licenses_registry", name="licenses"),
+        Hub(name="licenses"),
         Link(
             name="company_to_license",
             local_hub_name="companies",
@@ -51,27 +57,17 @@ class GoldenCompanyPyarrowSchema(BaseVaultRecord):
 
     # --- NAMES (SATELLITE) ---
     company_name: Annotated[str, Satellite(name="names", hub_name="entities")] = Field()
-    company_name_normalized: Annotated[Optional[str], Satellite(name="names", hub_name="entities")] = Field(
-        default=None
-    )
+    company_name_normalized: Annotated[Optional[str], Satellite(name="names", hub_name="entities")] = Field(default=None)
 
     # --- LOCATION (SATELLITE) ---
     address_1: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(default=None)
-    postal_code: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(
-        default=None
-    )
+    postal_code: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(default=None)
     city: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(default=None)
 
     # --- DESCRIPTIONS & INDUSTRY (SATELLITE) ---
-    certification_type: Annotated[Optional[str], Satellite(name="descriptions", hub_name="entities")] = Field(
-        default=None
-    )
-    trade_specialty: Annotated[Optional[str], Satellite(name="descriptions", hub_name="entities")] = Field(
-        default=None
-    )
-    naics_code: Annotated[Optional[str], Satellite(name="descriptions", hub_name="entities")] = Field(
-        default=None
-    )
+    certification_type: Annotated[Optional[str], Satellite(name="descriptions", hub_name="entities")] = Field(default=None)
+    trade_specialty: Annotated[Optional[str], Satellite(name="descriptions", hub_name="entities")] = Field(default=None)
+    naics_code: Annotated[Optional[str], Satellite(name="descriptions", hub_name="entities")] = Field(default=None)
 
     # --- STATUS ---
     is_active: Annotated[bool, Satellite(name="status", hub_name="entities")] = Field(default=True)
@@ -136,6 +132,21 @@ class GoldenCompanyRecord(BaseModel):
                     res[field] = source_value
                     break
         return res
+
+    @field_validator("naics_code")
+    @classmethod
+    def validate_naics_code(cls, value: str | None) -> str | None:
+        if not NAICS_MAPPING.get_label(value):
+            logger.debug(f"NAICS code {value} not valid, dropping value...")
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def set_naics_label(self) -> "Record":
+        # If is_active wasn't provided in the input, calculate it
+        if self.naics_code_label is None and self.naics_code:
+            self.naics_code_label = NAICS_MAPPING.get_label(self.naics_code)
+        return self
 
     @model_serializer(mode="plain")
     def serialize_model(self):

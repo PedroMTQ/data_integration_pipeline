@@ -105,9 +105,7 @@ class S3FileWriter(FileWriter):
             s3_path = f"s3://{self.bucket_name}/{s3_path}"
         self._file_path = s3_path
 
-        self.fs = s3fs.S3FileSystem(
-            key=aws_access_key, secret=aws_secret_access_key, client_kwargs={"endpoint_url": s3_endpoint_url}
-        )
+        self.fs = s3fs.S3FileSystem(key=aws_access_key, secret=aws_secret_access_key, client_kwargs={"endpoint_url": s3_endpoint_url})
 
     def _write_csv_chunk(self):
         if not self._file_handle:
@@ -125,9 +123,7 @@ class S3FileWriter(FileWriter):
             pa_csv.write_csv(table, self._file_handle)
         else:
             # If already open, we'd need to handle the header differently
-            pa_csv.write_csv(
-                table, self._file_handle, write_options=pa_csv.WriteOptions(include_header=False)
-            )
+            pa_csv.write_csv(table, self._file_handle, write_options=pa_csv.WriteOptions(include_header=False))
 
     def _write_parquet_chunk(self):
         table = pa.Table.from_pylist(self.buffer)

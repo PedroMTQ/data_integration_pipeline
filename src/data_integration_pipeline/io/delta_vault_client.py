@@ -153,9 +153,7 @@ class DeltaVaultClient:
         else:
             logger.debug(f"No changes detected for {table_name}. Skipping write.")
 
-    def read(
-        self, table_name: str, columns: list = None, version: int = None, timestamp: datetime = None
-    ) -> Iterable[pa.Table]:
+    def read(self, table_name: str, columns: list = None, version: int = None, timestamp: datetime = None) -> Iterable[pa.Table]:
         """
         Reads a Delta table directly into a PyArrow Table.
         """

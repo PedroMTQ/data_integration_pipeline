@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import Any, Optional, ClassVar, Annotated
+from typing import Any, Optional, ClassVar
 
 from pydantic import (
     Field,
@@ -10,48 +10,23 @@ from pydantic import (
     AliasPath,
 )
 from data_integration_pipeline.io.logger import logger
-from data_integration_pipeline.core.data_processing.data_models.templates.base_vault_record import BaseVaultRecord
 
 
 from data_integration_pipeline.core.data_processing.data_models.templates.base_model_company_name import (
     BaseModelCompanyName,
 )
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
-from data_integration_pipeline.core.data_vault.templates_data_vault import Hub, Link, Satellite
+
+from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
 
 
-
-class VaultRecord(BaseVaultRecord):
-    # --- IDENTIFIERS (HUB & LINKS) ---
-    vendor_id: Annotated[
-        str,
-        Hub(record_source="subcontractors_registry", name="vendors"),
-    ] = Field()
-
-    entity_id: Annotated[
-        Optional[str],
-        Hub(record_source="subcontractors_registry", name="entities"),
-        Link(
-            name="company_to_vendor",
-            local_hub_name="companies",
-            remote_hub_name="vendors",
-            metadata={"source": "sea_procurement"},
-        ),
-        Satellite(name="identifiers", hub_name="companies"),
-    ] = Field(default=None)
-
-    # --- NAMES (SATELLITE) ---
-    company_name: Annotated[str, Satellite(name="names", hub_name="vendors")] = Field(validation_alias=AliasPath('company_name', 'company_name'))
-    company_name_normalized: Annotated[Optional[str], Satellite(name="names", hub_name="vendors")] = Field(default=None)
-
-    # --- DESCRIPTIONS & INDUSTRY (SATELLITE) ---
-    certification_type: Annotated[Optional[str], Satellite(name="descriptions", hub_name="vendors")] = Field(
-        default=None
-    )
-    trade_specialty: Annotated[Optional[str], Satellite(name="descriptions", hub_name="vendors")] = Field(
-        default=None
-    )
-
+class SchemaRecord(BaseSchema):
+    vendor_id: str
+    entity_id: Optional[str]
+    company_name: str = Field(validation_alias=AliasPath("company_name", "company_name"))
+    company_name_normalized: Optional[str] = Field(default=None, validation_alias=AliasPath("company_name", "company_name_normalized"))
+    certification_type: Optional[str]
+    trade_specialty: Optional[str]
 
 
 class ModelCompanyName(BaseModelCompanyName):
@@ -59,19 +34,17 @@ class ModelCompanyName(BaseModelCompanyName):
 
 
 class Record(BaseRecord):
-    data_source: ClassVar[str] = "sub_contractors_registry"
-    schema: ClassVar[BaseVaultRecord] = VaultRecord
+    _record_schema: ClassVar[BaseSchema] = SchemaRecord
+    _data_source: ClassVar[str] = "sub_contractors_registry"
+    _upsert_key: ClassVar[str] = "vendor_id"
+    _partition_key: ClassVar[str] = "trade_specialty"
 
     vendor_id: str = Field(alias="Vendor ID", description="Vendor ID")
     entity_id: Optional[str] = Field(alias="Vendor UEI", description="Entity UEI")
     company_name: ModelCompanyName
-    certification_type: Optional[str] = Field(
-        default=None, alias="Certification Type", description="Certification type"
-    )
+    certification_type: Optional[str] = Field(default=None, alias="Certification Type", description="Certification type")
     # you could try to convert to NAICS using something like mappings (if available) embeddings
-    trade_specialty: Optional[str] = Field(
-        default=None, alias="Trade Specialty", description="Trade specialty"
-    )
+    trade_specialty: Optional[str] = Field(default=None, alias="Trade Specialty", description="Trade specialty")
 
     @field_validator("entity_id", "vendor_id")
     @classmethod
@@ -97,6 +70,7 @@ class Record(BaseRecord):
     @model_serializer(mode="plain")
     def serialize_model(self):
         return {
+            "data_source": self._data_source,
             "vendor_id": self.vendor_id,
             "entity_id": self.entity_id,
             **self.company_name.model_dump(),

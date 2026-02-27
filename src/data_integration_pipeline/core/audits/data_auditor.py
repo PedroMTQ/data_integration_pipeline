@@ -11,8 +11,7 @@ from data_integration_pipeline.core.audits.expectation_data_model import (
     ModelExpectationTemplate,
 )
 from data_integration_pipeline.settings import TEMP
-from data_integration_pipeline.core.schema_converter import get_pyarrow_schema
-
+from data_integration_pipeline.core.schema_converter import PyarrowSchemaGenerator
 
 
 class DataAuditor:
@@ -26,23 +25,23 @@ class DataAuditor:
         additional_rules: list[dict] = None,
         rebuild_suite: bool = True,
     ):
-        self.audit_columns = get_pyarrow_schema(data_model.schema).names
+        self.audit_columns = PyarrowSchemaGenerator(data_model.schema).run().names
+        self.audit_columns = data_model._pa_schema.names
         self.additional_rules = additional_rules
         self._rebuild_suite = rebuild_suite
 
-        data_suffix = f"{data_model.data_source}_{dataset_stage}"
+        data_suffix = f"{data_model._data_source}_{dataset_stage}"
         self.batch_definition_name = f"sample_{data_suffix}"
         self.duckdb_table_name = f"audit_{data_suffix}"
         self.run_name = f"audit_{data_suffix}"
-        self.data_asset_name = data_model.data_source
+        self.data_asset_name = data_model._data_source
         self.suite_name = f"suite_{data_suffix}"
         self.validation_definition_name = f"validation_definition_{data_suffix}"
 
         self.run_id = gx.RunIdentifier(run_name=self.run_name)
         self.context = gx.get_context(mode="file", project_root_dir=os.path.join(TEMP, "audits"))
-        self.db_path = os.path.join(TEMP, 'audits', 'duckdb', 'audit.db')
+        self.db_path = os.path.join(TEMP, "audits", "duckdb", "audit.db")
         self.__setup_expectations()
-
 
     def _get_expectations_definitions(self) -> list[dict[str, Any]]:
         res = [
@@ -199,14 +198,16 @@ class DataAuditor:
         try:
             self.val_definition = self.context.validation_definitions.get(self.validation_definition_name)
         except gx.exceptions.DataContextError:
-            self.val_definition = self.context.validation_definitions.add(gx.ValidationDefinition(name=self.validation_definition_name, data=self.batch_definition, suite=self.suite))
+            self.val_definition = self.context.validation_definitions.add(
+                gx.ValidationDefinition(name=self.validation_definition_name, data=self.batch_definition, suite=self.suite)
+            )
 
     def __build_suite(self):
         for expectation_model in self.expectations:
             self.suite.add_expectation(expectation_model.expectation)
 
     def __process_results(self, results: list[dict]) -> bool:
-        exception_failures = [r for r in results if not r["success"] and r["exception_info"].get('exception_info',{})]
+        exception_failures = [r for r in results if not r["success"] and r["exception_info"].get("exception_info", {})]
         critical_failures = [r for r in results if not r["success"] and r["expectation_config"]["meta"].get("severity") == "critical"]
         warning_failures = [r for r in results if not r["success"] and r["expectation_config"]["meta"].get("severity") == "warning"]
         info_failures = [r for r in results if not r["success"] and r["expectation_config"]["meta"].get("severity") == "info"]

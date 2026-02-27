@@ -2,7 +2,7 @@ import os
 from typing import Any, Optional
 
 import dateparser
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, model_serializer
 
 DAY_DATE_FORMAT = os.getenv("FULL_DATE_FORMAT", "%Y-%m-%d")
 MONTH_DATE_FORMAT = os.getenv("FULL_DATE_FORMAT", "%Y-%m")
@@ -35,6 +35,16 @@ class ModelDate(BaseModel):
             raise ValueError(f"Parser returned empty date for: {value}")
         except Exception as e:
             raise ValueError(f"Could not parse date string '{value}': {str(e)}") from e
+
+    @model_serializer(mode="plain")
+    def serialize_model(self):
+        if not self.year:
+            return None
+        if not self.month:
+            return {"year": self.year}
+        if not self.day:
+            return {"year": self.year, "month": self.month}
+        return {"year": self.year, "month": self.month, "day": self.day}
 
 
 if __name__ == "__main__":

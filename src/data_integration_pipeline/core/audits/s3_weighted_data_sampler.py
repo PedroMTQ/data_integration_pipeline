@@ -46,16 +46,14 @@ class S3WeightedParquetSampler:
 
     def __init__(
         self,
-        s3_path: Union[str, List[str]],
-        bucket_name: str,
+        data: Iterable[pa.Table],
         weight_column: str,
         weights: dict = {},
         target_total_rows: int = 1000,
         default_weight: float = 1.0,
         batch_size: int = 1000,
     ):
-        self.s3_paths = [s3_path] if isinstance(s3_path, str) else s3_path
-        self.bucket_name = bucket_name
+        self.data: Iterable[pa.Table] = data
         self.weight_column = weight_column
         self.weights = weights
         self.default_weight = default_weight
@@ -83,56 +81,35 @@ class S3WeightedParquetSampler:
         """Streams and samples using Polars for vectorized math and distribution."""
         if self._is_sampled:
             return
+        current_file_row_offset = 0
+        for table in self.data:
+            df = pl.from_arrow(table).with_row_index("_local_idx")
 
-        for s3_path in self.s3_paths:
-            logger.info(f"Streaming S3 -> Polars: {s3_path}")
-            with S3FileReader(s3_path, bucket_name=self.bucket_name, as_table=True) as reader:
-                current_file_row_offset = 0
+            batch_counts = df.select(pl.col(self.weight_column).cast(pl.Utf8).value_counts()).unnest(self.weight_column)
+            self.raw_counts_list.append(batch_counts)
 
-                for table in reader:
-                    # 1. Zero-Copy: PyArrow Table -> Polars DataFrame
-                    df = pl.from_arrow(table).with_row_index("_local_idx")
+            df = df.with_columns([pl.col(self.weight_column).replace_strict(self.weights, default=self.default_weight).cast(pl.Float64).alias("_w")]).filter(pl.col("_w") > 0)
+            if df.is_empty():
+                current_file_row_offset += table.num_rows
+                continue
 
-                    batch_counts = df.select(pl.col(self.weight_column).cast(pl.Utf8).value_counts()).unnest(
-                        self.weight_column
-                    )
-                    self.raw_counts_list.append(batch_counts)
+            num_valid = len(df)
+            scores = np.random.rand(num_valid) ** (1.0 / df["_w"].to_numpy())
 
-                    df = df.with_columns(
-                        [
-                            pl.col(self.weight_column)
-                            .replace_strict(self.weights, default=self.default_weight)
-                            .cast(pl.Float64)
-                            .alias("_w")
-                        ]
-                    ).filter(pl.col("_w") > 0)
-                    if df.is_empty():
-                        current_file_row_offset += table.num_rows
-                        continue
 
-                    # 4. A-Res Math
-                    num_valid = len(df)
-                    scores = np.random.rand(num_valid) ** (1.0 / df["_w"].to_numpy())
+            indices = df["_local_idx"].to_numpy()
+            vals = df[self.weight_column].to_list()
 
-                    # 5. Heap Update
-                    # We store the original file index using the _local_idx we preserved
-                    indices = df["_local_idx"].to_numpy()
-                    vals = df[self.weight_column].to_list()
+            for i in range(num_valid):
+                self.counter += 1  # Global counter
+                global_row_idx = current_file_row_offset + indices[i]
 
-                    for i in range(num_valid):
-                        self.counter += 1  # Global counter
-                        global_row_idx = current_file_row_offset + indices[i]
+                if len(self.heap) < self.target_total_rows:
+                    heapq.heappush(self.heap, (scores[i], self.counter, s3_path, global_row_idx, vals[i]))
+                elif scores[i] > self.heap[0][0]:
+                    heapq.heapreplace(self.heap, (scores[i], self.counter, s3_path, global_row_idx, vals[i]))
 
-                        if len(self.heap) < self.target_total_rows:
-                            heapq.heappush(
-                                self.heap, (scores[i], self.counter, s3_path, global_row_idx, vals[i])
-                            )
-                        elif scores[i] > self.heap[0][0]:
-                            heapq.heapreplace(
-                                self.heap, (scores[i], self.counter, s3_path, global_row_idx, vals[i])
-                            )
-
-                    current_file_row_offset += table.num_rows
+            current_file_row_offset += table.num_rows
         self._is_sampled = True
 
     def get_data(self) -> Iterable[pa.Table]:
@@ -164,9 +141,7 @@ class S3WeightedParquetSampler:
 
                     # Find which winning indexes fall within this specific batch
                     # This is much faster than checking every index in a loop
-                    batch_winners = [
-                        idx - current_offset for idx in row_indexes if current_offset <= idx < batch_end
-                    ]
+                    batch_winners = [idx - current_offset for idx in row_indexes if current_offset <= idx < batch_end]
 
                     if batch_winners:
                         # Use Polars for a zero-copy 'gather' on just this batch
@@ -216,9 +191,7 @@ class S3WeightedParquetSampler:
         combined_df = pl.concat(self.raw_counts_list)
 
         # 2. Final aggregation: Group by the value and sum the 'count' column
-        final_dist_df = (
-            combined_df.group_by(self.weight_column).agg(pl.col("count").sum()).sort("count", descending=True)
-        )
+        final_dist_df = combined_df.group_by(self.weight_column).agg(pl.col("count").sum()).sort("count", descending=True)
 
         # 3. Convert to dictionary efficiently
         # iter_rows() on two columns returns (value, count) tuples

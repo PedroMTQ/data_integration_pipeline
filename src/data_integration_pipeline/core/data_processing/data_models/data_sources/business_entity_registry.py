@@ -1,10 +1,9 @@
 from __future__ import annotations
 import os
-from typing import Any, Optional, ClassVar, Annotated
+from typing import Any, Optional, ClassVar
 
 from pydantic import (
     Field,
-    computed_field,
     model_serializer,
     model_validator,
     field_validator,
@@ -18,25 +17,17 @@ from data_integration_pipeline.core.data_processing.data_models.templates.base_m
 )
 from data_integration_pipeline.core.data_processing.utils import SoftStr
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
-from data_integration_pipeline.core.data_vault.templates_data_vault import Hub, Satellite
-from data_integration_pipeline.core.data_processing.data_models.templates.base_vault_record import BaseVaultRecord
+from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
 
 
-class VaultRecord(BaseVaultRecord):
-    # natural key for entities hub
-    entity_id: Annotated[str, Hub(record_source="entity_regitry", name="entities", is_primary=True)] = Field()
-
-    # --- NAMES (SATELLITE) ---
-    company_name: Annotated[str, Satellite(name="names", hub_name="entities")] = Field(validation_alias=AliasPath('company_name', 'company_name'))
-    company_name_normalized: Annotated[Optional[str], Satellite(name="names", hub_name="entities")] = Field(default=None,validation_alias=AliasPath('company_name', 'company_name_normalized'))
-
-    # --- LOCATION (SATELLITE) ---
-    address_1: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(default=None)
-    postal_code: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(default=None)
-    city: Annotated[Optional[str], Satellite(name="location", hub_name="entities")] = Field(default=None)
-
-    # --- STATUS (SATELLITE)---
-    is_active: Annotated[bool, Satellite(name="status", hub_name="entities")] = Field(default=True)
+class SchemaRecord(BaseSchema):
+    entity_id: str
+    company_name: str = Field(validation_alias=AliasPath("company_name", "company_name"))
+    company_name_normalized: Optional[str] = Field(default=None, validation_alias=AliasPath("company_name", "company_name_normalized"))
+    address_1: Optional[str]
+    postal_code: Optional[str]
+    city: Optional[str]
+    is_active: bool
 
 
 class ModelCompanyName(BaseModelCompanyName):
@@ -44,21 +35,29 @@ class ModelCompanyName(BaseModelCompanyName):
 
 
 class Record(BaseRecord):
-    data_source: ClassVar[str] = "business_entity_registry"
-    schema: ClassVar[BaseVaultRecord] = VaultRecord
+    _record_schema: ClassVar[BaseSchema] = SchemaRecord
+    _data_source: ClassVar[str] = "business_entity_registry"
+    _upsert_key: ClassVar[str] = "entity_id"
+    _partition_key: ClassVar[str] = "city"
 
     entity_id: str = Field(alias="Entity UEI", description="Entity UEI")
     company_name: ModelCompanyName
     address_1: SoftStr = Field(default=None, alias="Address Line 1")
     postal_code: Optional[str] = Field(default=None, alias="Zip Code")
     city: SoftStr = Field(default=None, alias="City Name")
-    entity_status: Optional[str] = Field(
-        default=None, alias="Registration Status", description="Entity status", exclude=True
-    )
+    entity_status: Optional[str] = Field(default=None, alias="Registration Status", description="Entity status", exclude=True)
+    is_active: bool = Field(default=None, description="Entity is active/inactive")
 
     @field_validator("entity_id")
     @classmethod
     def format_id(cls, value: str | None) -> str | None:
+        if isinstance(value, str):
+            return value.upper().strip()
+        return value
+
+    @field_validator("city", "address_1", "postal_code")
+    @classmethod
+    def format_location(cls, value: str | None) -> str | None:
         if isinstance(value, str):
             return value.upper().strip()
         return value
@@ -77,17 +76,17 @@ class Record(BaseRecord):
         data["company_name"] = ModelCompanyName(**data)
         return data
 
-    @computed_field(description="Status of company")
-    @property
-    def is_active(self) -> bool:
-        if self.entity_status == "ACT":
-            return True
-        else:
-            return False
+    @model_validator(mode="after")
+    def set_active_status(self) -> "Record":
+        # If is_active wasn't provided in the input, calculate it
+        if self.is_active is None:
+            self.is_active = self.entity_status == "ACT"
+        return self
 
     @model_serializer(mode="plain")
     def serialize_model(self):
         return {
+            "data_source": self._data_source,
             "entity_id": self.entity_id,
             **self.company_name.model_dump(),
             "address_1": self.address_1,
@@ -108,5 +107,7 @@ if __name__ == "__main__":
             try:
                 data_model = Record(**row)
                 print(data_model.model_dump())
+                print(data_model._pa_schema)
             except Exception as e:
                 logger.error(e)
+            break

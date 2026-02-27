@@ -43,7 +43,6 @@ class DuckdbClient:
         with duckdb.connect(self.db_path) as connection:
             connection.execute(f"DROP TABLE IF EXISTS {self.table_name}")
 
-
     def get_schema(self) -> pa.Schema | None:
         try:
             with duckdb.connect(self.db_path) as connection:
@@ -93,17 +92,17 @@ class DuckdbClient:
         with duckdb.connect(self.db_path) as conn:
             # DuckDB's fetch_record_batch_reader is great for large datasets
             # as it streams the results rather than loading the whole table at once.
-            reader = conn.execute(f"SELECT {select_clause} FROM {self.table_name}").fetch_record_batch(
-                self.batch_size
-            )
+            reader = conn.execute(f"SELECT {select_clause} FROM {self.table_name}").fetch_record_batch(self.batch_size)
             for batch in reader:
                 # Convert RecordBatch to Table for consistency with your previous code
                 yield pa.Table.from_batches([batch])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     from data_integration_pipeline.settings import TEMP
-    db_path = os.path.join(TEMP, 'audits', 'duckdb', 'audit.db')
-    table_name = 'audit_business_entity_registry_silver'
+
+    db_path = os.path.join(TEMP, "audits", "duckdb", "audit.db")
+    table_name = "audit_business_entity_registry_silver"
     duckdb_client = DuckdbClient(db_path=db_path, table_name=table_name)
     data = duckdb_client.get_data()
     for batch in data:

@@ -5,7 +5,7 @@ import uuid
 from decimal import Decimal
 from enum import EnumMeta
 from typing import Any, List, Literal, NamedTuple, Optional, Type, TypeVar, Union, cast
-from data_integration_pipeline.core.data_vault.templates_data_vault import Hub, Link, Satellite
+from data_integration_pipeline.core.data_processing.model_mapper import BaseRecordType
 
 import pyarrow as pa  # type: ignore
 from annotated_types import Ge, Gt
@@ -263,33 +263,37 @@ def _get_pyarrow_schema(
     return pa.struct(fields)
 
 
-def get_pyarrow_schema(
-    pydantic_class: Type[BaseModelType],
-    allow_losing_tz: bool = False,
-    exclude_fields: bool = False,
-    by_alias: bool = False,
-) -> pa.Schema:
-    """
-    Converts a Pydantic model into a PyArrow schema.
+class PyarrowSchemaGenerator:
+    def __init__(
+        self,
+        data_model: Type[BaseRecordType],
+        allow_losing_tz: bool = False,
+        exclude_fields: bool = False,
+        by_alias: bool = False,
+    ):
+        self.data_model = data_model
+        self.allow_losing_tz = allow_losing_tz
+        self.exclude_fields = exclude_fields
+        self.by_alias = by_alias
 
-    Args:
-        pydantic_class (Type[BaseModelType]): The Pydantic model class to convert.
-        allow_losing_tz (bool, optional): Whether to allow losing timezone information
-            when converting datetime fields. Defaults to False.
-        exclude_fields (bool, optional): If True, will exclude fields in the pydantic
-            model that have `Field(exclude=True)`. Defaults to False.
-        by_alias (bool, optional): If True, will create the pyarrow schema using the
-            (serialization) alias in the pydantic model. Defaults to False.
+    def run(self):
+        """
+        Converts a Pydantic model into a PyArrow schema.
 
-    Returns:
-        pa.Schema: The PyArrow schema representing the Pydantic model.
-    """
-    settings = Settings(
-        allow_losing_tz=allow_losing_tz,
-        by_alias=by_alias,
-        exclude_fields=exclude_fields,
-    )
-    return _get_pyarrow_schema(pydantic_class, settings)
+        Args:
+            pydantic_class (Type[BaseModelType]): The Pydantic model class to convert.
+            allow_losing_tz (bool, optional): Whether to allow losing timezone information
+                when converting datetime fields. Defaults to False.
+            exclude_fields (bool, optional): If True, will exclude fields in the pydantic
+                model that have `Field(exclude=True)`. Defaults to False.
+            by_alias (bool, optional): If True, will create the pyarrow schema using the
+                (serialization) alias in the pydantic model. Defaults to False.
+
+        Returns:
+            pa.Schema: The PyArrow schema representing the Pydantic model.
+        """
+        settings = Settings(allow_losing_tz=self.allow_losing_tz, by_alias=self.by_alias, exclude_fields=self.exclude_fields)
+        return _get_pyarrow_schema(self.data_model, settings)
 
 
 class VaultSchemaGenerator:
@@ -327,12 +331,8 @@ class VaultSchemaGenerator:
 
         # Handle Self-Referencing logic based on your class attributes
         if link_meta.local_hub_name == link_meta.remote_hub_name:
-            fields.append(
-                (f"{FOREIGN_KEY_COLUMN}_{link_meta.local_hub_name}_{link_meta.local_role}", pa.string())
-            )
-            fields.append(
-                (f"{FOREIGN_KEY_COLUMN}_{link_meta.remote_hub_name}_{link_meta.remote_role}", pa.string())
-            )
+            fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.local_hub_name}_{link_meta.local_role}", pa.string()))
+            fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.remote_hub_name}_{link_meta.remote_role}", pa.string()))
         else:
             fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.local_hub_name}", pa.string()))
             fields.append((f"{FOREIGN_KEY_COLUMN}_{link_meta.remote_hub_name}", pa.string()))
@@ -410,7 +410,7 @@ if __name__ == "__main__":
     s3_path = "silver/business_entity_registry/business_entity_registry.parquet"
     data_model = ModelMapper.get_data_model(s3_path)
 
-    pyarrow_schema = get_pyarrow_schema(data_model.schema)
+    pyarrow_schema = PyarrowSchemaGenerator(data_model.schema).run()
     print(pyarrow_schema)
     # schemas = VaultSchemaGenerator(data_model.schema).run()
     # for table, shema in schemas.items():

@@ -28,8 +28,11 @@ MIN_LENGTH_ADDRESS_1 = int(os.getenv("MIN_LENGTH_ADDRESS_1", "3"))
 
 ARCHIVE_DATA_FOLDER = "archive"
 BRONZE_DATA_FOLDER = "bronze"
+ARCHIVE_DATA_FOLDER = "archive"
 SILVER_DATA_FOLDER = "silver"
 ERRORS_DATA_FOLDER = "errors"
+PROCESSING_ERRORS_DATA_FOLDER = os.path.join(ERRORS_DATA_FOLDER, "processsing")
+LOADING_ERRORS_DATA_FOLDER = os.path.join(ERRORS_DATA_FOLDER, "loading")
 GOLD_DATA_FOLDER = "gold"
 
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "10"))
@@ -59,9 +62,8 @@ S3_WRITE_RETRY_DELAY = int(os.getenv("S3_WRITE_RETRY_DELAY", "5"))
 S3_WRITE_RETRY_BACKOFF = int(os.getenv("S3_WRITE_RETRY_BACKOFF", "5"))
 
 
-DELTA_VAULT_BUCKET = os.getenv("DELTA_VAULT_BUCKET")
 DATA_BUCKET = os.getenv("DATA_BUCKET")
-
+UNKNOWN_PARTITION_STR = "UNKNOWN"
 
 NATURAL_KEY_COLUMN = os.getenv("NATURAL_KEY_COLUMN", "nk")
 SOURCE_KEY_COLUMN = os.getenv("SOURCE_KEY_COLUMN", "rsrc")
@@ -72,11 +74,13 @@ PAYLOAD_KEY = os.getenv("PAYLOAD_KEY", "payload")
 FOREIGN_KEY_COLUMN = os.getenv("FOREIGN_KEY_COLUMN", "fk")
 
 
-DELTA_TABLE_URI = f"s3a://{DELTA_VAULT_BUCKET}"
+DELTA_TABLE_URI = f"s3a://{DATA_BUCKET}"
 STORAGE_OPTIONS = {
-    "AWS_ACCESS_KEY": S3_ACCESS_KEY,
-    "AWS_SECRET_ACCESS_KEY": S3_SECRET_ACCESS_KEY,
-    "AWS_ENDPOINT_URL": f"http://{S3_HOST}:{S3_PORT}",
-    "AWS_ALLOW_HTTP": "true",
+    "aws_access_key_id": S3_ACCESS_KEY,
+    "aws_secret_access_key": S3_SECRET_ACCESS_KEY,
+    "endpoint_url": f"http://{S3_HOST}:{S3_PORT}",
+    "allow_http": "true",
 }
+
+
 DELTA_CLIENT_BATCH_SIZE = int(os.environ.get("DELTA_CLIENT_BATCH_SIZE", "10000"))
