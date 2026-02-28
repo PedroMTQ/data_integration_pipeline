@@ -13,6 +13,7 @@ from data_integration_pipeline.settings import (
     S3_WRITE_RETRY_DELAY,
     S3_WRITE_RETRY_BACKOFF,
     DATA_BUCKET,
+    DELTA_TABLE_SUFFIX,
 )
 
 from data_integration_pipeline.io.logger import logger
@@ -85,12 +86,12 @@ class S3Client:
                 for obj in page.get("Contents", []):
                     s3_path = obj["Key"]
                     # Check if '.delta' is in the path
-                    if ".delta" in s3_path:
+                    if DELTA_TABLE_SUFFIX in s3_path:
                         # Logic: Split the path and find the segment ending in .delta
                         # e.g., 'silver/registry/business.delta/_delta_log/00.json'
                         parts = s3_path.split("/")
                         for i, part in enumerate(parts):
-                            if part.endswith(".delta"):
+                            if part.endswith(DELTA_TABLE_SUFFIX):
                                 # Reconstruct the path up to the .delta folder
                                 root_path = "/".join(parts[: i + 1])
                                 delta_roots.add(root_path)

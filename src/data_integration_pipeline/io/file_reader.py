@@ -1,5 +1,6 @@
 import csv
 from typing import Iterable, Union
+import json
 import pyarrow.parquet as pq
 import pyarrow as pa
 from pathlib import Path
@@ -9,6 +10,7 @@ from data_integration_pipeline.settings import (
     S3_SECRET_ACCESS_KEY,
     S3_ENDPOINT_URL,
     DATA_BUCKET,
+    PARQUET_TABLE_SUFFIX,
 )
 from data_integration_pipeline.io.logger import logger
 from pyarrow import csv as pa_csv
@@ -29,8 +31,10 @@ class FileReader:
         extension = Path(self._file_path).suffix.lower()
         if extension == ".csv":
             self._generator = self._read_csv()
-        elif extension == ".parquet":
+        elif extension == PARQUET_TABLE_SUFFIX:
             self._generator = self._read_parquet()
+        elif extension == ".json":
+            self._generator = self._read_json()
         else:
             raise ValueError(f"Unsupported file extension: {extension}")
         return self._generator
@@ -49,6 +53,23 @@ class FileReader:
         # If your reader has an internal file handle, close it here
         if hasattr(self, "fs") and hasattr(self, "_file_handle"):
             self._file_handle.close()
+
+    def _read_json(self) -> Iterable[dict]:
+        """
+        Reads a JSON file and yields the content.
+        If the JSON is a list, it yields items. If a dict, it yields the dict.
+        """
+        # Note: We rely on the child classes to set _file_handle correctly
+        content = json.load(self._file_handle)
+        if isinstance(content, list):
+            for item in content:
+                yield item
+        else:
+            yield content
+
+    # TODO this is a bit non-sensical, but this way we keep the same interface, maybe change it later?
+    def read_json(self) -> dict:
+        return next(self)
 
 
 class LocalFileReader(FileReader):
@@ -81,6 +102,10 @@ class LocalFileReader(FileReader):
             else:
                 for row in table.to_pylist():
                     yield row
+
+    def _read_json(self) -> Iterable[dict]:
+        self._file_handle = open(self._file_path, mode="r", encoding="utf-8")
+        return super()._read_json()
 
 
 class S3FileReader(FileReader):
@@ -124,6 +149,11 @@ class S3FileReader(FileReader):
                 for row in table.to_pylist():
                     yield row
 
+    def _read_json(self) -> Iterable[dict]:
+        # s3fs handles the text stream for json.load perfectly
+        self._file_handle = self.fs.open(self._file_path, mode="rt", encoding="utf-8")
+        return super()._read_json()
+
 
 if __name__ == "__main__":
     # file_path = "/home/pedroq/workspace/data_integration_pipeline/tests/data/business_entity_registry.csv"
@@ -132,6 +162,9 @@ if __name__ == "__main__":
     # for row in LocalFileReader(file_path, as_table=False):
     #     print(row)
     #     break
-    s3_path = "bronze/business_entity_registry/business_entity_registry.csv"
-    for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
-        print(table.shape)
+    # s3_path = "bronze/business_entity_registry/business_entity_registry.csv"
+    # for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
+    #     print(table.shape)
+    s3_path = "entity_resolution/019ca4b0-2e7d-7308-b854-d81e5533bd5b/metadata.json"
+    data = S3FileReader(s3_path, bucket_name=DATA_BUCKET).read_json()
+    print(data)

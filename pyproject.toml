@@ -19,7 +19,6 @@ dependencies = [
 
     "great_expectations",
     "pyarrow",
-    # "pandas",
     "duckdb",
     "duckdb-engine",
     "polars",
@@ -27,7 +26,6 @@ dependencies = [
     "boto3",
     "s3fs",
     "uuid6",
-    "kanoniv",
     "splink",
 ]
 

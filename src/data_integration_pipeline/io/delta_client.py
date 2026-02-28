@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import Iterable, Union
+from typing import Union
 
 import polars as pl
 import pyarrow as pa
@@ -17,6 +17,8 @@ from data_integration_pipeline.settings import (
     UNKNOWN_PARTITION_STR,
 )
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
+import pyarrow.dataset as ds
+import pyarrow.compute as pc
 
 
 class DeltaClient:
@@ -105,38 +107,62 @@ class DeltaClient:
         logger.info(f"Upserted batch into {s3_path}.")
 
     def read(
-        self,
-        table_path: str,
-        columns: list = None,
-        keys: list = None,
-        key_column: str = None,
-        version: Union[int, datetime] = None,
-        drop_versioning_cols: bool = True,
-    ) -> Iterable[pa.Table]:
+        self, table_path: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None
+    ) -> pa.RecordBatchReader:
         """
-        Unified read method using Polars.
-        Handles fragmentation by re-batching and lookups via predicate pushdown.
+        Direct Arrow streaming from Delta Lake.
+        Zero Polars, Zero memory overhead.
         """
         data_model = ModelMapper.get_data_model(table_path)
         partition_key = data_model._partition_key
-        if key_column or keys:
-            if not (key_column and keys):
-                raise Exception("When filtering data, you need to provide the keys and key_column")
         uri = self._get_uri(table_path)
-        lf = pl.scan_delta(uri, storage_options=self.storage_options, version=version)
-        # we drop the unknown partition key
-        if partition_key in lf.collect_schema().names():
-            lf = lf.with_columns(pl.col(partition_key).replace(UNKNOWN_PARTITION_STR, None).alias(partition_key))
-        if columns:
-            lf = lf.select(columns)
-        if drop_versioning_cols:
-            cols_to_drop = [c for c in [HASH_DIFF_COLUMN, LDTS_COLUMN] if c in lf.collect_schema().names()]
-            lf = lf.drop(cols_to_drop)
-        if keys:
-            lf = lf.filter(pl.col(key_column).is_in(keys))
-        df = lf.collect()
-        for sub_df in df.iter_slices(n_rows=self.batch_size):
-            yield sub_df.to_arrow()
+        dt = DeltaTable(uri, version=version, storage_options=self.storage_options)
+        all_column_names = [f.name for f in dt.schema().fields]
+        projection_cols = columns if columns else all_column_names
+        projection = {col: ds.field(col) for col in projection_cols}
+        if partition_key in projection:
+            projection[partition_key] = pc.if_else(
+                pc.equal(ds.field(partition_key), UNKNOWN_PARTITION_STR), pa.scalar(None, type=pa.string()), ds.field(partition_key)
+            )
+        filter_expr = None
+        if keys and key_column:
+            filter_expr = ds.field(key_column).isin(keys)
+        return dt.to_pyarrow_dataset().to_batches(columns=columns, filter=filter_expr, batch_size=self.batch_size)
+
+    # TODO test and drop
+    # def read2(
+    #     self,
+    #     table_path: str,
+    #     columns: list = None,
+    #     keys: list = None,
+    #     key_column: str = None,
+    #     version: Union[int, datetime] = None,
+    #     drop_versioning_cols: bool = True,
+    # ) -> Iterable[pa.Table]:
+    #     """
+    #     Unified read method using Polars.
+    #     Handles fragmentation by re-batching and lookups via predicate pushdown.
+    #     """
+    #     data_model = ModelMapper.get_data_model(table_path)
+    #     partition_key = data_model._partition_key
+    #     if key_column or keys:
+    #         if not (key_column and keys):
+    #             raise Exception("When filtering data, you need to provide the keys and key_column")
+    #     uri = self._get_uri(table_path)
+    #     lf = pl.scan_delta(uri, storage_options=self.storage_options, version=version)
+    #     # we drop the unknown partition key
+    #     if partition_key in lf.collect_schema().names():
+    #         lf = lf.with_columns(pl.col(partition_key).replace(UNKNOWN_PARTITION_STR, None).alias(partition_key))
+    #     if columns:
+    #         lf = lf.select(columns)
+    #     if drop_versioning_cols:
+    #         cols_to_drop = [c for c in [HASH_DIFF_COLUMN, LDTS_COLUMN] if c in lf.collect_schema().names()]
+    #         lf = lf.drop(cols_to_drop)
+    #     if keys:
+    #         lf = lf.filter(pl.col(key_column).is_in(keys))
+    #     df = lf.collect()
+    #     for sub_df in df.iter_slices(n_rows=self.batch_size):
+    #         yield sub_df.to_arrow()
 
     def rollback(self, table_name: str, version: int = None, timestamp: datetime = None):
         """Restores table to a previous state using Delta Time Travel."""
@@ -157,14 +183,15 @@ if __name__ == "__main__":
         table_path="silver/business_entity_registry/business_entity_registry.delta",
     )
     for batch in data:
+        # print(batch)
         print([i.get("city") for i in batch.to_pylist()])
-    data = client.read(
-        table_path="silver/licenses_registry/licenses_registry.delta",
-    )
-    for batch in data:
-        print([i.get("city") for i in batch.to_pylist()])
-    data = client.read(
-        table_path="silver/sub_contractors_registry/sub_contractors_registry.delta",
-    )
-    for batch in data:
-        print([i.get("city") for i in batch.to_pylist()])
+    # data = client.read(
+    #     table_path="silver/licenses_registry/licenses_registry.delta",
+    # )
+    # for batch in data:
+    #     print([i.get("city") for i in batch.to_pylist()])
+    # data = client.read(
+    #     table_path="silver/sub_contractors_registry/sub_contractors_registry.delta",
+    # )
+    # for batch in data:
+    #     print([i.get("city") for i in batch.to_pylist()])

@@ -38,7 +38,9 @@ PROCESSING_ERRORS_DATA_FOLDER = os.path.join(ERRORS_DATA_FOLDER, "processsing")
 LOADING_ERRORS_DATA_FOLDER = os.path.join(ERRORS_DATA_FOLDER, "loading")
 GOLD_DATA_FOLDER = "gold"
 
-LINKS_FILE_NAME = "links.parquet"
+DELTA_TABLE_SUFFIX = ".delta"
+PARQUET_TABLE_SUFFIX = ".parquet"
+LINKS_FILE_NAME = f"links{PARQUET_TABLE_SUFFIX}"
 LINKS_METADATA_FILE_NAME = "metadata.json"
 LINKS_MODEL_FILE_NAME = "model.json"
 

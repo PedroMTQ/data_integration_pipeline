@@ -5,6 +5,7 @@ from data_integration_pipeline.io.file_writer import S3FileWriter
 from data_integration_pipeline.io.duckdb_client import DuckdbClient
 import pyarrow as pa
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
+from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunMetadata
 from data_integration_pipeline.settings import (
     ER_TEMP,
     ENTITY_RESOLUTION_DATA_FOLDER,
@@ -12,20 +13,14 @@ from data_integration_pipeline.settings import (
     LINKS_METADATA_FILE_NAME,
     LINKS_MODEL_FILE_NAME,
     DATA_BUCKET,
-    SERVICE_NAME,
-    CODE_VERSION,
     SPLINK_CLUSTERING_THRESHOLD,
     SPLINK_INFERENCE_PREDICT_THRESHOLD,
 )
 import os
-import sys
 from data_integration_pipeline.io.logger import logger
 import duckdb
 from splink import Linker, DuckDBAPI, SettingsCreator
-import json
 import uuid6
-import splink
-from datetime import datetime, timezone
 
 
 class SplinkClient:
@@ -39,6 +34,8 @@ class SplinkClient:
             logger.info("Dropping old DB...")
             os.remove(self.db_path)
         self.records_count = {}
+        self.data_models_primary_keys = {}
+
         self.run_id = str(uuid6.uuid7())
         logger.info(f"Starting splink run: {self.run_id}")
 
@@ -83,6 +80,7 @@ class SplinkClient:
         for table_path in self.s3_client.get_delta_tables(prefix="silver"):
             data_model = ModelMapper.get_data_model(table_path)
             table_name = data_model._data_source
+            self.data_models_primary_keys[table_name] = data_model._primary_key
             self.write_table(table_path=table_path, table_name=table_name, primary_key=data_model._primary_key, schema=master_schema)
             res.append(table_name)
         return res
@@ -133,7 +131,15 @@ class SplinkClient:
         for pa_table in raw_linkage:
             pa_table = pa_table.to_pylist()
             for row in pa_table:
-                yield {"cluster_id": row["cluster_id"], "id_type": row["unique_id"], "data_source": row["source_dataset"]}
+                primary_key_type = self.data_models_primary_keys[row["source_dataset"]]
+                row = {
+                    "cluster_id": row["cluster_id"],
+                    "primary_key_id": row["unique_id"],
+                    "primary_key_type": primary_key_type,
+                    "data_source": row["source_dataset"],
+                }
+                print(row)
+                yield row
 
     def get_clusters_count(self, df_clusters, db_connection) -> int:
         """
@@ -148,26 +154,18 @@ class SplinkClient:
         count_sql = f"SELECT COUNT(1) FROM {df_clusters.physical_name}"
         return db_connection.execute(count_sql).fetchone()[0]
 
-    def generate_run_metadata(self, table_names, linker: Linker, links_count: int, clusters_count: int, records_count: dict[str, int]) -> dict:
-        now = datetime.now(timezone.utc)
-        res = {
-            "run_id": self.run_id,
-            "timestamp": now.isoformat(),
-            "execution_context": {
-                f"{SERVICE_NAME}_version": CODE_VERSION,
-                "python_version": sys.version.split()[0],
-                "splink_version": splink.__version__,
-            },
-            "inputs": {"table_names": table_names, "per_source_records_count": records_count, "records_count": sum(records_count.values())},
-            "outputs": {"links_count": links_count, "clusters_count": clusters_count},
-            "model_metadata": {
-                "splink_inference_predict_threshold": SPLINK_INFERENCE_PREDICT_THRESHOLD,
-                "splink_clustering_threshold": SPLINK_CLUSTERING_THRESHOLD,
-                # Short hash of the model settings for quick comparison
-                "settings_hash": hash(json.dumps(linker._settings_obj.as_dict(), sort_keys=True)),
-            },
-        }
-        return res
+    def generate_run_metadata(
+        self, links_s3_path: str, table_names, linker: Linker, links_count: int, clusters_count: int, records_count: dict[str, int]
+    ) -> dict:
+        return SplinkRunMetadata.from_splink(
+            run_id=self.run_id,
+            links_s3_path=links_s3_path,
+            table_names=table_names,
+            linker=linker,
+            links_count=links_count,
+            clusters_count=clusters_count,
+            records_count=records_count,
+        ).to_dict()
 
     def write_links(self, links_data: Iterable[dict]) -> str:
         s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, LINKS_FILE_NAME)
@@ -209,6 +207,7 @@ class SplinkClient:
         links_data = self.yield_clustered_records(df_clusters=df_clusters, db_connection=db_connection)
         links_s3_path = self.write_links(links_data=links_data)
         run_metadata = self.generate_run_metadata(
+            links_s3_path=links_s3_path,
             table_names=table_names,
             linker=linker,
             links_count=self.get_links_count(df_clusters=df_clusters, db_connection=db_connection),

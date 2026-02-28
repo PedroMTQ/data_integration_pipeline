@@ -9,6 +9,7 @@ from data_integration_pipeline.settings import (
     S3_SECRET_ACCESS_KEY,
     S3_ENDPOINT_URL,
     DATA_BUCKET,
+    PARQUET_TABLE_SUFFIX,
 )
 from data_integration_pipeline.io.logger import logger
 import pyarrow.csv as pa_csv
@@ -33,7 +34,7 @@ class FileWriter:
             self.__flush()
         if self.extension == ".csv":
             self._write_csv_table(table)
-        elif self.extension == ".parquet":
+        elif self.extension == PARQUET_TABLE_SUFFIX:
             self._write_parquet_table(table)
 
     def write_row(self, row: dict[str, Any]):
@@ -48,7 +49,7 @@ class FileWriter:
             return
         if self.extension == ".csv":
             self._write_csv_chunk()
-        elif self.extension == ".parquet":
+        elif self.extension == PARQUET_TABLE_SUFFIX:
             self._write_parquet_chunk()
 
         self.buffer = []
