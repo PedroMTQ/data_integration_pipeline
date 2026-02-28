@@ -11,6 +11,7 @@ from data_integration_pipeline.settings import (
     ENTITY_RESOLUTION_DATA_FOLDER,
     LINKS_FILE_NAME,
     LINKS_METADATA_FILE_NAME,
+    CLUSTER_ID_STR,
     LINKS_MODEL_FILE_NAME,
     DATA_BUCKET,
     SPLINK_CLUSTERING_THRESHOLD,
@@ -133,7 +134,7 @@ class SplinkClient:
             for row in pa_table:
                 primary_key_type = self.data_models_primary_keys[row["source_dataset"]]
                 row = {
-                    "cluster_id": row["cluster_id"],
+                    CLUSTER_ID_STR: row["cluster_id"],
                     "primary_key_id": row["unique_id"],
                     "primary_key_type": primary_key_type,
                     "data_source": row["source_dataset"],

@@ -6,6 +6,8 @@ from data_integration_pipeline.core.entity_resolution.links_processor import Lin
 from datetime import datetime
 from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunMetadata
 from data_integration_pipeline.core.entity_resolution.integrated_record import Record
+from data_integration_pipeline.io.logger import logger
+from data_integration_pipeline.io.file_writer import S3FileWriter
 
 
 class CreateIntegratedRecords:
@@ -18,10 +20,19 @@ class CreateIntegratedRecords:
         self.s3_client = S3Client()
 
     def process_data(self, metadata: SplinkRunMetadata) -> str:
+        logger.info(f'Processing {metadata}')
         db_path = os.path.join(TEMP, ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, "records.duckdb")
         processor = LinksProcessor(metadata=metadata, bucket_name=DATA_BUCKET, db_path=db_path)
-        for cluster in processor.run():
-            record = Record(**cluster)
+        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, f'errors.parquet')
+        with S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET) as fail_writer:
+            for cluster in processor.run():
+                cluster_dict = {"data": cluster}
+                try:
+                    record = Record(**cluster_dict)
+                except Exception as e:
+                    # TODO change to error when we have better datas
+                    logger.debug(f'Error processing integrated record: {cluster} due to  {e}')
+                    fail_writer.write_row(cluster_dict)
 
     @staticmethod
     def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"]) -> dict[str, "SplinkRunMetadata"]:

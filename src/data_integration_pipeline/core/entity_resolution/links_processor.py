@@ -5,7 +5,7 @@ from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunM
 from data_integration_pipeline.io.file_reader import S3FileReader
 from pathlib import Path
 import os
-from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DELTA_TABLE_SUFFIX, HASH_DIFF_COLUMN
+from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DELTA_TABLE_SUFFIX, HASH_DIFF_COLUMN, COMPOSITE_ID_STR, DATA_SOURCE_STR
 import pyarrow as pa
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 import pyarrow.compute as pc
@@ -30,9 +30,8 @@ class LinksProcessor:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def _wrap_as_record_batch_reader(generator):
+    def _wrap_links_as_record_batch_reader(generator):
         try:
-            # 1. Peek at the first item to establish schema
             first_table = next(generator)
 
             def add_composite_key(table):
@@ -41,8 +40,7 @@ class LinksProcessor:
                     pc.cast(table.column("primary_key_id"), pa.string()),
                     pa.scalar(LinksProcessor.COMPOSITE_KEY_SEP),
                 )
-                # Append as a brand new column
-                return table.append_column("composite_id", composite_id)
+                return table.append_column(COMPOSITE_ID_STR, composite_id)
 
             first_table = add_composite_key(first_table)
             schema = first_table.schema
@@ -51,7 +49,6 @@ class LinksProcessor:
                 yield from first_table.to_batches()
                 for table in generator:
                     table = add_composite_key(table)
-                    # print('other_table', table['composite_id'])
                     yield from table.to_batches()
 
             return pa.RecordBatchReader.from_batches(schema, batch_stream())
@@ -74,26 +71,28 @@ class LinksProcessor:
                     pc.cast(arrow_table.column(primary_key_type), pa.string()),
                     pa.scalar(LinksProcessor.COMPOSITE_KEY_SEP),
                 )
-                standardized_table = arrow_table.append_column("composite_id", composite_id_col)
+                data_source_col = pa.array([table_name] * len(arrow_table), type=pa.string())
+                standardized_table = arrow_table.append_column(COMPOSITE_ID_STR, composite_id_col)
                 standardized_table = standardized_table.drop(HASH_DIFF_COLUMN)
+                standardized_table = standardized_table.append_column(DATA_SOURCE_STR, data_source_col)
                 connection.register(f"raw_{table_name}", standardized_table)
                 source_queries.append(f"SELECT * FROM raw_{table_name}")
             union_sql = " UNION ALL BY NAME ".join(source_queries)
             with S3FileReader(s3_path=self.metadata.links_s3_path, bucket_name=self.bucket_name, as_table=True) as reader:
-                links_reader = self._wrap_as_record_batch_reader(reader)
+                links_reader = self._wrap_links_as_record_batch_reader(reader)
                 connection.register("links_stream", links_reader)
                 if links_reader is None:
                     raise Exception("Links data is missing...")
                 connection.register("links_stream", links_reader)
                 connection.execute(f"CREATE VIEW all_sources AS {union_sql}")
                 # we generally would not get orphans, unless splink for some reason doesn't output unmatched data, we keep with coalesce for safety
-                query = """
+                query = f"""
                 SELECT
-                    COALESCE(l.cluster_id, 'orphan_' || s.composite_id) as cluster_id,
+                    COALESCE(l.cluster_id, 'orphan_' || s.{COMPOSITE_ID_STR}) as cluster_id,
                     s.*
                 FROM all_sources s
-                LEFT JOIN (SELECT DISTINCT cluster_id, composite_id FROM links_stream) l
-                    ON s.composite_id = l.composite_id
+                LEFT JOIN (SELECT DISTINCT cluster_id, {COMPOSITE_ID_STR} FROM links_stream) l
+                    ON s.{COMPOSITE_ID_STR} = l.{COMPOSITE_ID_STR}
                 ORDER BY cluster_id
                 """
                 return connection.execute(query).fetch_record_batch()
