@@ -4,7 +4,7 @@ import tomllib
 
 os.environ["PYDANTIC_ERRORS_INCLUDE_URL"] = "0"
 
-DEBUG = int(os.environ.get("DEBUG", "0"))
+DEBUG = int(os.getenv("DEBUG", "0"))
 
 APP = os.path.dirname(__file__)
 ROOT = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -14,7 +14,8 @@ TEMP = os.path.join(ROOT, "tmp")
 TESTS = os.path.join(ROOT, "tests")
 TESTS_DATA = os.path.join(TESTS, "data")
 CONFIG = os.path.join(ROOT, "config")
-ER_SPEC_PATH = os.path.join(CONFIG, 'er_spec.yaml')
+ER_SPEC_PATH = os.path.join(CONFIG, "er_spec.yaml")
+ER_TEMP = os.path.join(TEMP, "er")
 
 with open(PYPROJECT_PATH, "rb") as f:
     data = tomllib.load(f)
@@ -31,24 +32,29 @@ ARCHIVE_DATA_FOLDER = "archive"
 BRONZE_DATA_FOLDER = "bronze"
 ARCHIVE_DATA_FOLDER = "archive"
 SILVER_DATA_FOLDER = "silver"
+ENTITY_RESOLUTION_DATA_FOLDER = "entity_resolution"
 ERRORS_DATA_FOLDER = "errors"
 PROCESSING_ERRORS_DATA_FOLDER = os.path.join(ERRORS_DATA_FOLDER, "processsing")
 LOADING_ERRORS_DATA_FOLDER = os.path.join(ERRORS_DATA_FOLDER, "loading")
 GOLD_DATA_FOLDER = "gold"
 
-MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "10"))
+LINKS_FILE_NAME = "links.parquet"
+LINKS_METADATA_FILE_NAME = "metadata.json"
+LINKS_MODEL_FILE_NAME = "model.json"
+
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "10"))
 
 
-POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
-POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
-POSTGRES_USER = os.environ.get("POSTGRES_USER")
-POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
-POSTGRES_DATABASE = os.environ.get("POSTGRES_DATABASE")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE")
 POSTGRES_STATIC_DBS = ["postgres"]
-POSTGRES_CLIENT_BATCH_SIZE = int(os.environ.get("POSTGRES_CLIENT_BATCH_SIZE", "10000"))
+POSTGRES_CLIENT_BATCH_SIZE = int(os.getenv("POSTGRES_CLIENT_BATCH_SIZE", "10000"))
 
-CONNECTION_TIMEOUT = int(os.environ.get("CONNECTION_TIMEOUT", "10"))
-STATEMENT_TIMEOUT = int(os.environ.get("STATEMENT_TIMEOUT", "60"))
+CONNECTION_TIMEOUT = int(os.getenv("CONNECTION_TIMEOUT", "10"))
+STATEMENT_TIMEOUT = int(os.getenv("STATEMENT_TIMEOUT", "60"))
 
 
 # we could create and use access keys, but for now we keep it like this
@@ -85,4 +91,8 @@ STORAGE_OPTIONS = {
 }
 
 
-DELTA_CLIENT_BATCH_SIZE = int(os.environ.get("DELTA_CLIENT_BATCH_SIZE", "10000"))
+DELTA_CLIENT_BATCH_SIZE = int(os.getenv("DELTA_CLIENT_BATCH_SIZE", "10000"))
+
+
+SPLINK_INFERENCE_PREDICT_THRESHOLD = float(os.getenv("SPLINK_INFERENCE_PREDICT_THRESHOLD", "0.01"))
+SPLINK_CLUSTERING_THRESHOLD = float(os.getenv("SPLINK_CLUSTERING_THRESHOLD", "0.9"))

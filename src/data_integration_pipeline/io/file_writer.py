@@ -12,6 +12,7 @@ from data_integration_pipeline.settings import (
 )
 from data_integration_pipeline.io.logger import logger
 import pyarrow.csv as pa_csv
+import json
 
 
 class FileWriter:
@@ -138,6 +139,15 @@ class S3FileWriter(FileWriter):
             self._file_handle = self.fs.open(self._file_path, mode="wb")
             self._writer = pq.ParquetWriter(self._file_handle, table.schema, compression="snappy")
         self._writer.write_table(table)
+
+    def write_json(self, data: dict):
+        """
+        Serializes a dictionary to JSON and writes it directly to the S3 path.
+        This overwrites any existing file at the path.
+        """
+        json_string = json.dumps(data, indent=4)
+        # pipe() takes the path and the bytes to write
+        self.fs.pipe(self._file_path, json_string.encode("utf-8"))
 
 
 if __name__ == "__main__":

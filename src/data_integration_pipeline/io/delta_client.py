@@ -16,6 +16,7 @@ from data_integration_pipeline.settings import (
     STORAGE_OPTIONS,
     UNKNOWN_PARTITION_STR,
 )
+from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 
 
 class DeltaClient:
@@ -52,17 +53,17 @@ class DeltaClient:
             raise e
 
     @staticmethod
-    def __prepare_data(data: pa.Table, upsert_key: str, partition_key: str) -> pa.Table:
+    def __prepare_data(data: pa.Table, primary_key: str, partition_key: str) -> pa.Table:
         now = datetime.now(timezone.utc)
         df = pl.from_arrow(data)
         if partition_key:
             df = df.with_columns(pl.col(partition_key).fill_null(UNKNOWN_PARTITION_STR))
-        exclude = {upsert_key, HASH_DIFF_COLUMN, LDTS_COLUMN}
+        exclude = {primary_key, HASH_DIFF_COLUMN, LDTS_COLUMN}
         columns_to_hash = [c for c in df.columns if c not in exclude]
         df = df.with_columns(
             [
                 # sets hash diff
-                pl.concat_str(pl.col(columns_to_hash)).hash().cast(pl.Utf8).alias(HASH_DIFF_COLUMN),
+                pl.concat_str(pl.col(columns_to_hash)).hash().cast(pl.String).alias(HASH_DIFF_COLUMN),
                 # sets load timestamp
                 pl.lit(now).alias(LDTS_COLUMN),
             ]
@@ -70,12 +71,12 @@ class DeltaClient:
         data = df.to_arrow()
         return data
 
-    def write(self, s3_path: str, data: pa.Table, upsert_key: str, partition_key: str = None):
+    def write(self, s3_path: str, data: pa.Table, primary_key: str, partition_key: str = None):
         """
         Main entry point. Performs an idempotent upsert using hash-diffing.
         """
         uri = self._get_uri(s3_path)
-        data = self.__prepare_data(data=data, upsert_key=upsert_key, partition_key=partition_key)
+        data = self.__prepare_data(data=data, primary_key=primary_key, partition_key=partition_key)
         # 2. Handle Initial Table Creation
         if not DeltaTable.is_deltatable(uri, storage_options=self.storage_options):
             write_deltalake(
@@ -87,8 +88,8 @@ class DeltaClient:
             logger.info(f"Initialized new table {s3_path} with {len(data)} records.")
             return
         dt = DeltaTable(uri, storage_options=self.storage_options)
-        mapping = {col: f"source.{col}" for col in data.schema.names if col != upsert_key}
-        base_predicate = f"target.{upsert_key} = source.{upsert_key}"
+        mapping = {col: f"source.{col}" for col in data.schema.names if col != primary_key}
+        base_predicate = f"target.{primary_key} = source.{primary_key}"
         if partition_key:
             base_predicate += f" AND target.{partition_key} = source.{partition_key}"
         (
@@ -103,18 +104,34 @@ class DeltaClient:
         )
         logger.info(f"Upserted batch into {s3_path}.")
 
-    def read(self, table_name: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None) -> Iterable[pa.Table]:
+    def read(
+        self,
+        table_path: str,
+        columns: list = None,
+        keys: list = None,
+        key_column: str = None,
+        version: Union[int, datetime] = None,
+        drop_versioning_cols: bool = True,
+    ) -> Iterable[pa.Table]:
         """
         Unified read method using Polars.
         Handles fragmentation by re-batching and lookups via predicate pushdown.
         """
+        data_model = ModelMapper.get_data_model(table_path)
+        partition_key = data_model._partition_key
         if key_column or keys:
             if not (key_column and keys):
-                raise Exception(f'When filtering data, you need to provide the keys and key_column') 
-        uri = self._get_uri(table_name)
+                raise Exception("When filtering data, you need to provide the keys and key_column")
+        uri = self._get_uri(table_path)
         lf = pl.scan_delta(uri, storage_options=self.storage_options, version=version)
+        # we drop the unknown partition key
+        if partition_key in lf.collect_schema().names():
+            lf = lf.with_columns(pl.col(partition_key).replace(UNKNOWN_PARTITION_STR, None).alias(partition_key))
         if columns:
             lf = lf.select(columns)
+        if drop_versioning_cols:
+            cols_to_drop = [c for c in [HASH_DIFF_COLUMN, LDTS_COLUMN] if c in lf.collect_schema().names()]
+            lf = lf.drop(cols_to_drop)
         if keys:
             lf = lf.filter(pl.col(key_column).is_in(keys))
         df = lf.collect()
@@ -137,7 +154,17 @@ class DeltaClient:
 if __name__ == "__main__":
     client = DeltaClient()
     data = client.read(
-        table_name="silver/business_entity_registry/business_entity_registry.delta",
+        table_path="silver/business_entity_registry/business_entity_registry.delta",
     )
-    for i in data:
-        print(i.shape)
+    for batch in data:
+        print([i.get("city") for i in batch.to_pylist()])
+    data = client.read(
+        table_path="silver/licenses_registry/licenses_registry.delta",
+    )
+    for batch in data:
+        print([i.get("city") for i in batch.to_pylist()])
+    data = client.read(
+        table_path="silver/sub_contractors_registry/sub_contractors_registry.delta",
+    )
+    for batch in data:
+        print([i.get("city") for i in batch.to_pylist()])

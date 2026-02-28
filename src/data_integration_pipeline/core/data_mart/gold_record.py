@@ -2,20 +2,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any, ClassVar, Optional
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    field_validator,
-    Field,
-    model_serializer,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, field_validator, Field, model_serializer, model_validator
 from data_integration_pipeline.core.data_processing.mappings import NaicsMapping
 
 from data_integration_pipeline.core.data_vault.templates_data_vault import Hub, Link, Satellite
-from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import (
-    BaseVaultRecord,
-)
+
+from data_integration_pipeline.io.logger import logger
+
 
 NAICS_MAPPING = NaicsMapping()
 

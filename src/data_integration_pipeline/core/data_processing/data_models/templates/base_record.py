@@ -17,13 +17,13 @@ class BaseRecord(BaseModel):
     model_config = BASE_CONFIG_DICT
     _record_schema: ClassVar[BaseSchema]
     _data_source: ClassVar[str]
-    _upsert_key: ClassVar[str]
+    _primary_key: ClassVar[str]
     _partition_key: ClassVar[str] = None
     _pa_schema: ClassVar[pa.Schema]
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        for attr in ["_record_schema", "_data_source", "_upsert_key"]:
+        for attr in ["_record_schema", "_data_source", "_primary_key"]:
             # Check if the subclass has defined data_source and it's not the base version
             if not hasattr(cls, attr):
                 raise TypeError(f"Class {cls.__name__} must define a unique <{attr}> ClassVar.")

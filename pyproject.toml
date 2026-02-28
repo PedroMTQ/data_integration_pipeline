@@ -28,6 +28,7 @@ dependencies = [
     "s3fs",
     "uuid6",
     "kanoniv",
+    "splink",
 ]
 
 [dependency-groups]

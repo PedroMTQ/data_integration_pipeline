@@ -15,6 +15,7 @@ from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.core.data_processing.data_models.templates.base_model_company_name import (
     BaseModelCompanyName,
 )
+from data_integration_pipeline.core.data_processing.features_extraction.identifiers import normalize_id
 from data_integration_pipeline.core.data_processing.utils import SoftStr
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
@@ -37,7 +38,7 @@ class ModelCompanyName(BaseModelCompanyName):
 class Record(BaseRecord):
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
     _data_source: ClassVar[str] = "business_entity_registry"
-    _upsert_key: ClassVar[str] = "entity_id"
+    _primary_key: ClassVar[str] = "entity_id"
     _partition_key: ClassVar[str] = "city"
 
     entity_id: str = Field(alias="Entity UEI", description="Entity UEI")
@@ -51,9 +52,7 @@ class Record(BaseRecord):
     @field_validator("entity_id")
     @classmethod
     def format_id(cls, value: str | None) -> str | None:
-        if isinstance(value, str):
-            return value.upper().strip()
-        return value
+        return normalize_id(value)
 
     @field_validator("city", "address_1", "postal_code")
     @classmethod

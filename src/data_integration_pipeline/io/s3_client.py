@@ -12,7 +12,7 @@ from data_integration_pipeline.settings import (
     S3_WRITE_RETRIES,
     S3_WRITE_RETRY_DELAY,
     S3_WRITE_RETRY_BACKOFF,
-    DATA_BUCKET
+    DATA_BUCKET,
 )
 
 from data_integration_pipeline.io.logger import logger
@@ -21,7 +21,7 @@ from data_integration_pipeline.io.logger import logger
 class S3Client:
     def __init__(
         self,
-        bucket_name: str=DATA_BUCKET,
+        bucket_name: str = DATA_BUCKET,
         aws_access_key: str = S3_ACCESS_KEY,
         aws_secret_access_key: str = S3_SECRET_ACCESS_KEY,
         s3_endpoint_url: str = S3_ENDPOINT_URL,

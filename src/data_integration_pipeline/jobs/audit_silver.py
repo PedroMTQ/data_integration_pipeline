@@ -8,11 +8,12 @@ from typing import Iterable
 from data_integration_pipeline.core.audits.expectation_data_model import ModelExpectationTemplate
 from data_integration_pipeline.core.audits.data_auditor import DataAuditor
 from data_integration_pipeline.io.s3_client import S3Client
-from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DATA_BUCKET, AUDIT_TOTAL_ROWS
+from data_integration_pipeline.settings import SILVER_DATA_FOLDER, AUDIT_TOTAL_ROWS
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3WeightedParquetSampler
 
 from data_integration_pipeline.io.logger import logger
+
 
 class AuditSilverDataJob:
     def __init__(self):
@@ -42,7 +43,7 @@ class AuditSilverDataJob:
         }
 
     def process_data(self, s3_path):
-        logger.info(f'Auditing {s3_path}')
+        logger.info(f"Auditing {s3_path}")
         data_model = ModelMapper.get_data_model(s3_path)
         s3_sampler = S3WeightedParquetSampler(
             s3_path=s3_path,
@@ -59,9 +60,9 @@ class AuditSilverDataJob:
             yield silver_s3_path
 
     def run(self):
-        '''
+        """
         generic wrapper to run all tasks
-        '''
+        """
         for s3_path in self.get_data_to_process():
             self.process_data(s3_path)
 
@@ -70,9 +71,11 @@ def process_task(s3_path: str):
     job = AuditSilverDataJob()
     job.process_data(s3_path)
 
+
 def get_tasks() -> list[str]:
     job = AuditSilverDataJob()
     return list(job.get_data_to_process())
+
 
 if __name__ == "__main__":
     job = AuditSilverDataJob()

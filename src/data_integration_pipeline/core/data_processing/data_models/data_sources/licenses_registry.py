@@ -24,6 +24,7 @@ from data_integration_pipeline.core.data_processing.utils import SoftStr
 from data_integration_pipeline.core.data_processing.mappings import NaicsMapping
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
+from data_integration_pipeline.core.data_processing.features_extraction.identifiers import normalize_id
 
 
 NAICS_MAPPING = NaicsMapping()
@@ -58,7 +59,7 @@ class ModelCompanyName(BaseModelCompanyName):
 class Record(BaseRecord):
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
     _data_source: ClassVar[str] = "licenses_registry"
-    _upsert_key: ClassVar[str] = "license_id"
+    _primary_key: ClassVar[str] = "license_id"
     _partition_key: ClassVar[str] = "city"
 
     license_id: str = Field(alias="LICENSE_NUM", description="License number for the company")
@@ -86,9 +87,7 @@ class Record(BaseRecord):
     @field_validator("license_id")
     @classmethod
     def format_id(cls, value: str | None) -> str | None:
-        if isinstance(value, str):
-            return value.upper().strip()
-        return value
+        return normalize_id(value)
 
     @field_validator("naics_code")
     @classmethod

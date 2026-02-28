@@ -11,7 +11,7 @@ DATE_PARSER = dateparser.DateDataParser()
 
 
 class ModelDate(BaseModel):
-    year: int = Field(description="Year", ge=1500)
+    year: Optional[int] = Field(default=None, description="Year", ge=1500)
     month: Optional[int] = Field(default=None, description="Month of the year", ge=1, le=12)
     day: Optional[int] = Field(default=None, description="Day of the month", ge=1, le=31)
 

@@ -54,7 +54,7 @@ class S3WeightedParquetSampler:
         batch_size: int = 1000,
     ):
         self.data_model = ModelMapper.get_data_model(s3_path)
-        self.upsert_key = self.data_model._upsert_key
+        self.primary_key = self.data_model._primary_key
         self.delta_client = DeltaClient()
         self.s3_path = s3_path
         self.weight_column = weight_column
@@ -84,7 +84,7 @@ class S3WeightedParquetSampler:
         """Streams and samples using Polars for vectorized math and distribution."""
         if self._is_sampled:
             return
-        data = self.delta_client.read(table_name=self.s3_path)
+        data = self.delta_client.read(table_path=self.s3_path)
         for table in data:
             df = pl.from_arrow(table)
 
@@ -98,7 +98,7 @@ class S3WeightedParquetSampler:
                 continue
             num_valid = len(df)
             scores = np.random.rand(num_valid) ** (1.0 / df["_weight"].to_numpy())
-            keys = df[self.upsert_key].to_list()
+            keys = df[self.primary_key].to_list()
             vals = df[self.weight_column].to_list()
             for i in range(num_valid):
                 self.counter += 1  # Tie-breaker
@@ -120,7 +120,7 @@ class S3WeightedParquetSampler:
         # 1. Extract the winning IDs from the heap
         winning_ids = [item[2] for item in self.heap]
         # 2. Use Delta/PyArrow Dataset to fetch ONLY those rows
-        return self.delta_client.read(table_name=self.s3_path, keys=winning_ids, key_column=self.upsert_key)
+        return self.delta_client.read(table_path=self.s3_path, keys=winning_ids, key_column=self.primary_key)
 
     def get_sample_data_distribution(self) -> dict[str, int]:
         """Returns distribution using the scalar values cached in the heap."""

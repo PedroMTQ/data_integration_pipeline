@@ -33,7 +33,7 @@ class ProcessBronzetoSilver:
         writer.write(
             s3_path=s3_path,
             data=pa.Table.from_pylist(data, schema=data_model._pa_schema),
-            upsert_key=data_model._upsert_key,
+            primary_key=data_model._primary_key,
             partition_key=data_model._partition_key,
         )
 
@@ -102,20 +102,23 @@ class ProcessBronzetoSilver:
             }
 
     def run(self) -> str:
-        '''
+        """
         generic wrapper to run all tasks
-        '''
+        """
         for task in self.get_data_to_process():
-            return self.process_data(**task)
+            self.process_data(**task)
+
 
 def process_task(task_dict: dict):
     job = ProcessBronzetoSilver()
     silver_s3_path = job.process_data(**task_dict)
     return silver_s3_path
 
+
 def get_tasks() -> list[dict]:
     job = ProcessBronzetoSilver()
     return list(job.get_data_to_process())
+
 
 if __name__ == "__main__":
     job = ProcessBronzetoSilver()

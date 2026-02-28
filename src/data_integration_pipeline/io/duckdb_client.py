@@ -50,9 +50,10 @@ class DuckdbClient:
         except Exception as _:
             return None
 
-    def __save_into_disk(self, data: Iterable[pa.Table]):
+    def __save_into_disk(self, data: Iterable[pa.Table]) -> int:
         """Consumes the entire iterable and writes it to DuckDB."""
         logger.info(f"Saving data into disk at {self.db_path} to {self.table_name}")
+        total_rows = 0
         with duckdb.connect(self.db_path) as connection:
             # We create the table with the first batch to define schema
             try:
@@ -60,18 +61,20 @@ class DuckdbClient:
                 connection.register("data_batch", data_batch)
                 connection.execute(f"CREATE OR REPLACE TABLE {self.table_name} AS SELECT * FROM data_batch")
                 connection.unregister("data_batch")
+                total_rows += len(data_batch)
             except StopIteration:
                 logger.warning("Stream was empty. Nothing to save.")
-                return
+                return total_rows
             for data_batch in data:
+                total_rows += len(data_batch)
                 connection.register("data_batch", data_batch)
                 connection.execute(f"INSERT INTO {self.table_name} SELECT * FROM data_batch")
                 connection.unregister("data_batch")
-        logger.info(f"Successfully stored stream to {self.db_path}")
+        logger.info(f"Successfully stored stream ({total_rows} rows) to {self.db_path}")
+        return total_rows
 
-    def save_to_disk(self, data: Iterable[pa.Table]) -> bool:
-        self.__save_into_disk(data=data)
-        return True
+    def save_to_disk(self, data: Iterable[pa.Table]) -> int:
+        return self.__save_into_disk(data=data)
 
     def save_to_disk_and_load(self, data: Iterable[pa.Table]) -> Iterable[pa.Table]:
         # when we save into disk, we consume the iterator, so we need to reload the data from duckdb

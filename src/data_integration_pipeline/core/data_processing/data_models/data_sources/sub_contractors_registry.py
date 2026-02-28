@@ -18,6 +18,7 @@ from data_integration_pipeline.core.data_processing.data_models.templates.base_m
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
 
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
+from data_integration_pipeline.core.data_processing.features_extraction.identifiers import normalize_id
 
 
 class SchemaRecord(BaseSchema):
@@ -36,7 +37,7 @@ class ModelCompanyName(BaseModelCompanyName):
 class Record(BaseRecord):
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
     _data_source: ClassVar[str] = "sub_contractors_registry"
-    _upsert_key: ClassVar[str] = "vendor_id"
+    _primary_key: ClassVar[str] = "vendor_id"
     _partition_key: ClassVar[str] = "trade_specialty"
 
     vendor_id: str = Field(alias="Vendor ID", description="Vendor ID")
@@ -49,9 +50,7 @@ class Record(BaseRecord):
     @field_validator("entity_id", "vendor_id")
     @classmethod
     def format_id(cls, value: str | None) -> str | None:
-        if isinstance(value, str):
-            return value.upper().strip()
-        return value
+        return normalize_id(value)
 
     @model_validator(mode="before")
     @classmethod
