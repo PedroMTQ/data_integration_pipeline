@@ -14,7 +14,6 @@ class CreateIntegratedRecords:
     """
     Processes links and merges all data to create business-drivsen data
     """
-
     # we could add a locking mechanism (to avoid racing conditions during parallel work) like in here  https://github.com/PedroMTQ/helical_pdqueiros/blob/main/src/helical_pdqueiros but this is simpler in a POC
     def __init__(self):
         self.s3_client = S3Client()
@@ -23,16 +22,20 @@ class CreateIntegratedRecords:
         logger.info(f'Processing {metadata}')
         db_path = os.path.join(TEMP, ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, "records.duckdb")
         processor = LinksProcessor(metadata=metadata, bucket_name=DATA_BUCKET, db_path=db_path)
-        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, f'errors.parquet')
-        with S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET) as fail_writer:
+        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, 'errors.parquet')
+        integrated_records_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, 'integrated_records.parquet')
+        fail_writer = S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET)
+        integrated_records_writer = S3FileWriter(s3_path=integrated_records_s3_path, bucket_name=DATA_BUCKET)
+        with integrated_records_writer as writer, fail_writer as errors_writer:
             for cluster in processor.run():
                 cluster_dict = {"data": cluster}
                 try:
                     record = Record(**cluster_dict)
+                    writer.write_row(record.model_dump())
                 except Exception as e:
                     # TODO change to error when we have better datas
                     logger.debug(f'Error processing integrated record: {cluster} due to  {e}')
-                    fail_writer.write_row(cluster_dict)
+                    errors_writer.write_row(cluster_dict)
 
     @staticmethod
     def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"]) -> dict[str, "SplinkRunMetadata"]:
