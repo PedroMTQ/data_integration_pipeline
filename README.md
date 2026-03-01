@@ -12,7 +12,6 @@
 
 
 # TODO
-- load integrated records into integrated_records.db
 - create id bridge
 - create master view
 - add airflow?

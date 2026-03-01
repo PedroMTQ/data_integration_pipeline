@@ -1,10 +1,11 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from data_integration_pipeline.settings import (
     SERVICE_NAME,
     CODE_VERSION,
     SPLINK_CLUSTERING_THRESHOLD,
-    SPLINK_INFERENCE_PREDICT_THRESHOLD,
+    SPLINK_INFERENCE_PREDICT_THRESHOLD,ENTITY_RESOLUTION_DATA_FOLDER, PARQUET_TABLE_SUFFIX
 )
+import os
 import sys
 from splink import Linker
 import json
@@ -69,3 +70,8 @@ class SplinkRunMetadata:
         if total_in == 0:
             return 0.0
         return (total_in - self.outputs["clusters_count"]) / total_in
+
+    @property
+    def integrated_records_s3_path(self) -> float:
+        """Business Metric: What percentage of records were successfully linked?"""
+        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f'integrated_records{PARQUET_TABLE_SUFFIX}')

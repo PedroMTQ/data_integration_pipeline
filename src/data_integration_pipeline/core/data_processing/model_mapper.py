@@ -2,6 +2,7 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources imp
     LicensesRegistryRecord,
     BusinessEntityRegistryRecord,
     SubContractorsRegistryRecord,
+    IntegratedRecord,
     BaseRecordType,
 )
 import re
@@ -14,6 +15,7 @@ class ModelMapper:
         re.compile(r"business_entity_registry.*", re.IGNORECASE): BusinessEntityRegistryRecord,
         re.compile(r"licenses.*", re.IGNORECASE): LicensesRegistryRecord,
         re.compile(r"sub_contractor.*", re.IGNORECASE): SubContractorsRegistryRecord,
+        re.compile(r"(gold_business_entity|integrated_records).*", re.IGNORECASE): IntegratedRecord,
     }
 
     @staticmethod
@@ -24,6 +26,7 @@ class ModelMapper:
         """
         # Extract just the filename (e.g., 'licenses_2026.csv')
         file_name = Path(file_path).name
+        print(file_name)
 
         for pattern, model_class in ModelMapper.MAPPINGS.items():
             if pattern.match(file_name):

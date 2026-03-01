@@ -8,11 +8,13 @@ from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunM
 from data_integration_pipeline.core.entity_resolution.integrated_record import Record
 from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.io.file_writer import S3FileWriter
+from data_integration_pipeline.core.metrics import Metrics
+from data_integration_pipeline.core.utils import get_latest_metadata_by_table_group
 
 
 class CreateIntegratedRecords:
     """
-    Processes links and merges all data to create business-drivsen data
+    Processes links and merges all data to create integrated records data
     """
     # we could add a locking mechanism (to avoid racing conditions during parallel work) like in here  https://github.com/PedroMTQ/helical_pdqueiros/blob/main/src/helical_pdqueiros but this is simpler in a POC
     def __init__(self):
@@ -26,48 +28,33 @@ class CreateIntegratedRecords:
         integrated_records_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, 'integrated_records.parquet')
         fail_writer = S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET)
         integrated_records_writer = S3FileWriter(s3_path=integrated_records_s3_path, bucket_name=DATA_BUCKET)
+        metrics = Metrics()
         with integrated_records_writer as writer, fail_writer as errors_writer:
             for cluster in processor.run():
-                cluster_dict = {"data": cluster}
+                record = None
+                if not cluster:
+                    continue
                 try:
-                    record = Record(**cluster_dict)
+                    record = Record.from_cluster(cluster)
                     writer.write_row(record.model_dump())
+                    metrics.log_result(is_success=True)
                 except Exception as e:
                     # TODO change to error when we have better datas
-                    logger.debug(f'Error processing integrated record: {cluster} due to  {e}')
+                    logger.debug(f'Error processing integrated record: {record} with cluster {cluster} due to  {e}')
+                    cluster_dict = {"cluster_id": [i.get('cluster_id') for i in cluster][0], 'data': cluster}
                     errors_writer.write_row(cluster_dict)
-
-    @staticmethod
-    def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"]) -> dict[str, "SplinkRunMetadata"]:
-        """
-        Groups runs by their input table combinations and returns only
-        the most recent SplinkRunMetadata object for each group.
-        """
-        latest_runs: dict[str, SplinkRunMetadata] = {}
-        for entry in metadata_list:
-            # 1. Access attributes directly from the object
-            tables = entry.inputs.get("table_names", [])
-            table_group = ",".join(sorted(tables))
-            # 2. Parse the timestamp string into a datetime for comparison
-            # We assume entry.timestamp is an ISO format string
-            current_ts = datetime.fromisoformat(entry.timestamp)
-
-            if table_group not in latest_runs:
-                # First time seeing this group? It's the current winner.
-                latest_runs[table_group] = entry
-            else:
-                # Compare against the existing winner's timestamp
-                existing_ts = datetime.fromisoformat(latest_runs[table_group].timestamp)
-                if current_ts > existing_ts:
-                    latest_runs[table_group] = entry
-        return list(latest_runs.values())
+                    metrics.log_result(is_success=False)
+        logger.info(f"Processed {metadata.run_id} and wrote output to {integrated_records_s3_path}. File metrics: {metrics}")
+        if metrics.failures:
+            logger.warning(f"Wrote {metrics.failures} invalid rows to {errors_s3_path}")
+        return integrated_records_s3_path
 
     def get_data_to_process(self) -> list[dict]:
         metadata_list = []
         for s3_path in self.s3_client.get_files(prefix=ENTITY_RESOLUTION_DATA_FOLDER, file_name_pattern=r"metadata\.json"):
             metadata = S3FileReader(s3_path=s3_path, bucket_name=DATA_BUCKET).read_json()
             metadata_list.append(SplinkRunMetadata(**metadata))
-        target_runs = self.get_latest_metadata_by_table_group(metadata_list=metadata_list)
+        target_runs = get_latest_metadata_by_table_group(metadata_list=metadata_list)
         return target_runs
 
     def run(self) -> str:

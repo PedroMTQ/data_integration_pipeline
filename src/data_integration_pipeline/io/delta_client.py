@@ -56,12 +56,18 @@ class DeltaClient:
 
     @staticmethod
     def __prepare_data(data: pa.Table, primary_key: str, partition_key: str) -> pa.Table:
+        if not primary_key:
+            raise Exception('Missing primary_key')
         now = datetime.now(timezone.utc)
         df = pl.from_arrow(data)
         if partition_key:
             df = df.with_columns(pl.col(partition_key).fill_null(UNKNOWN_PARTITION_STR))
         exclude = {primary_key, HASH_DIFF_COLUMN, LDTS_COLUMN}
-        columns_to_hash = [c for c in df.columns if c not in exclude]
+        columns_to_hash = [
+                    name for name, dtype in df.schema.items()
+                    if name not in exclude and not dtype.is_nested()
+                ]
+
         df = df.with_columns(
             [
                 # sets hash diff
@@ -73,12 +79,29 @@ class DeltaClient:
         data = df.to_arrow()
         return data
 
-    def write(self, s3_path: str, data: pa.Table, primary_key: str, partition_key: str = None):
+    def write_overwrite(self, s3_path: str, data: pa.Table, primary_key: str=None, partition_key: str = None, add_metadata_columns: bool=True):
+
+        """
+        Writes the data to the Delta table using 'overwrite' mode.
+        This replaces the entire table content but maintains version history.
+        """
+        uri = self._get_uri(s3_path)
+        if add_metadata_columns:
+            data = self.__prepare_data(data=data, primary_key=primary_key, partition_key=partition_key)
+        write_deltalake(uri,data=data, mode="overwrite", partition_by=[partition_key] if partition_key else None,
+            storage_options=self.storage_options,
+            # schema_mode="overwrite" allows schema evolution if the integrated record model changes
+            schema_mode="overwrite"
+        )
+        logger.info(f"Overwrote Gold table {s3_path} with {len(data)} integrated records.")
+
+    def write(self, s3_path: str, data: pa.Table, primary_key: str=None, partition_key: str = None, add_metadata_columns: bool=True):
         """
         Main entry point. Performs an idempotent upsert using hash-diffing.
         """
         uri = self._get_uri(s3_path)
-        data = self.__prepare_data(data=data, primary_key=primary_key, partition_key=partition_key)
+        if add_metadata_columns:
+            data = self.__prepare_data(data=data, primary_key=primary_key, partition_key=partition_key)
         # 2. Handle Initial Table Creation
         if not DeltaTable.is_deltatable(uri, storage_options=self.storage_options):
             write_deltalake(
@@ -106,21 +129,21 @@ class DeltaClient:
         )
         logger.info(f"Upserted batch into {s3_path}.")
 
-    def read(
-        self, table_path: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None
-    ) -> pa.RecordBatchReader:
+    def read(self, table_path: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None) -> pa.RecordBatchReader:
         """
         Direct Arrow streaming from Delta Lake.
         Zero Polars, Zero memory overhead.
         """
         data_model = ModelMapper.get_data_model(table_path)
-        partition_key = data_model._partition_key
+        partition_key = None
+        if data_model:
+            partition_key = data_model._partition_key
         uri = self._get_uri(table_path)
         dt = DeltaTable(uri, version=version, storage_options=self.storage_options)
         all_column_names = [f.name for f in dt.schema().fields]
         projection_cols = columns if columns else all_column_names
         projection = {col: ds.field(col) for col in projection_cols}
-        if partition_key in projection:
+        if partition_key and partition_key in projection:
             projection[partition_key] = pc.if_else(
                 pc.equal(ds.field(partition_key), UNKNOWN_PARTITION_STR), pa.scalar(None, type=pa.string()), ds.field(partition_key)
             )

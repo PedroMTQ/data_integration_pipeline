@@ -14,6 +14,7 @@ from pathlib import Path
 from data_integration_pipeline.io.logger import logger
 from typing import Iterable
 from data_integration_pipeline.io.file_reader import S3FileReader
+from data_integration_pipeline.core.metrics import Metrics
 from data_integration_pipeline.io.file_writer import S3FileWriter
 from data_integration_pipeline.io.delta_client import DeltaClient
 import pyarrow as pa
@@ -46,19 +47,18 @@ class ProcessBronzetoSilver:
         fail_writer = S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET)
         data_model = ModelMapper.get_data_model(bronze_s3_path)
         # you'd want to expose these metrics to a dashboard e.g., using prometheus+grafana or send events somewhere
-        metrics = {"success": 0, "failures": 0, "total": 0}
+        metrics = Metrics()
         batch_buffer = []
         with reader as stream_in, fail_writer as fail_stream_out:
             for row in stream_in:
-                metrics["total"] += 1
                 try:
                     processed_data = data_model(**row)
                     batch_buffer.append(processed_data.model_dump())
-                    metrics["success"] += 1
+                    metrics.log_result(is_success=True)
                 except Exception as e:
                     logger.warning(f"Validation error: {e}")
                     fail_stream_out.write_row(row)
-                    metrics["failures"] += 1
+                    metrics.log_result(is_success=False)
                 # Check if we should flush the buffer
                 if len(batch_buffer) >= DELTA_CLIENT_BATCH_SIZE:
                     self._flush_buffer(
@@ -77,8 +77,8 @@ class ProcessBronzetoSilver:
                     s3_path=silver_s3_path,
                 )
         logger.info(f"Processed {bronze_s3_path} and wrote output to {silver_s3_path}. File metrics: {metrics}")
-        if metrics["failures"]:
-            logger.warning(f"Wrote {metrics['failures']} invalid rows to {errors_s3_path}")
+        if metrics.failures:
+            logger.warning(f"Wrote {metrics.failures} invalid rows to {errors_s3_path}")
         self.s3_client.move_file(current_path=bronze_s3_path, new_path=archive_s3_path)
         return silver_s3_path
 
