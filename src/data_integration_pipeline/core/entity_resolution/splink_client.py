@@ -22,7 +22,7 @@ from data_integration_pipeline.io.logger import logger
 import duckdb
 from splink import Linker, DuckDBAPI, SettingsCreator
 import uuid6
-
+from collections import defaultdict
 
 class SplinkClient:
     def __init__(self, table_names: list[str], settings: SettingsCreator):
@@ -129,6 +129,8 @@ class SplinkClient:
             ORDER BY cluster_id
             """
         raw_linkage = db_connection.execute(sql).arrow()
+        cluster_map = defaultdict(set)
+        overlap_counts = defaultdict(int)
         for pa_table in raw_linkage:
             pa_table = pa_table.to_pylist()
             for row in pa_table:
@@ -139,8 +141,13 @@ class SplinkClient:
                     "primary_key_type": primary_key_type,
                     "data_source": row["source_dataset"],
                 }
-                print(row)
+                cluster_map[row['cluster_id']].add(row['data_source'])
                 yield row
+        for sources in cluster_map.values():
+            # Create a sorted string signature like "registry_a + registry_b"
+            signature = " + ".join(sorted(list(sources)))
+            overlap_counts[signature] += 1
+        self.overlap_report = overlap_counts
 
     def get_clusters_count(self, df_clusters, db_connection) -> int:
         """
@@ -158,6 +165,8 @@ class SplinkClient:
     def generate_run_metadata(
         self, links_s3_path: str, table_names, linker: Linker, links_count: int, clusters_count: int, records_count: dict[str, int]
     ) -> dict:
+        print('here', self.overlap_report)
+        raise Exception
         return SplinkRunMetadata.from_splink(
             run_id=self.run_id,
             links_s3_path=links_s3_path,
@@ -166,6 +175,7 @@ class SplinkClient:
             links_count=links_count,
             clusters_count=clusters_count,
             records_count=records_count,
+            overlap_report=self.overlap_report,
         ).to_dict()
 
     def write_links(self, links_data: Iterable[dict]) -> str:
@@ -207,14 +217,19 @@ class SplinkClient:
         )
         links_data = self.yield_clustered_records(df_clusters=df_clusters, db_connection=db_connection)
         links_s3_path = self.write_links(links_data=links_data)
+        links_count=self.get_links_count(df_clusters=df_clusters, db_connection=db_connection),
+        clusters_count=self.get_clusters_count(df_clusters=df_clusters, db_connection=db_connection),
+        print('overlap_report', self.overlap_report)
         run_metadata = self.generate_run_metadata(
             links_s3_path=links_s3_path,
             table_names=table_names,
             linker=linker,
-            links_count=self.get_links_count(df_clusters=df_clusters, db_connection=db_connection),
-            clusters_count=self.get_clusters_count(df_clusters=df_clusters, db_connection=db_connection),
+            links_count=links_count,
+            clusters_count=clusters_count,
             records_count=self.records_count,
         )
+        logger.info(f'Splink run results: {run_metadata}')
+
         self.write_metadata(run_metadata=run_metadata)
         self.write_model(linker=linker)
         return links_s3_path

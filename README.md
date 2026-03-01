@@ -15,6 +15,8 @@
 - improve efficeincy of create_gold_records
 - add airflow?
 - readme
+- add airflow sensors and orchestration
+- add better auditing for splink matches
 
 
 # Setup 

@@ -53,7 +53,7 @@ LINK_RECORD_DEPTH_SCORE_STR = "_depth_score"
 LINK_RECORD_CONSENSUS_SCORE_STR = "_consensus_score"
 LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR = "_anchor_agreement_score"
 LINK_RECORD_GLOBAL_SCORE_STR = "_global_score"
-LINK_RECORD_IS_PRIMARY_STR = '_is_primary'
+LINK_RECORD_IS_PRIMARY_STR = "_is_primary"
 
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")

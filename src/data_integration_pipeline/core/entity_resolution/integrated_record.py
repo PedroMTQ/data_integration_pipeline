@@ -27,27 +27,30 @@ from data_integration_pipeline.core.data_processing.data_models.templates.base_r
 from data_integration_pipeline.core.data_processing.data_models.templates.model_date import ModelDate
 
 
-
 class ModelLicense(BaseModel):
     model_config = BASE_CONFIG_DICT
     _data_source: ClassVar[str] = "licenses_registry"
     license_id: str
     expiration_date: Optional[ModelDate]
 
+
 class ModelEntityID(BaseModel):
     model_config = BASE_CONFIG_DICT
     entity_id: str = Field(description="Entity UEI")
-    data_source: str = Field(description='Data source of the entity')
-    depth_score: float = Field(description='Depth score of the entity')
-    consensus_score: float = Field(description='Consensus score of the entity')
-    global_score: float = Field(description='Global score of the entity')
-    agreement_score: float = Field(description='Anchor agreement score of the entity')
+    data_source: str = Field(description="Data source of the entity")
+    depth_score: float = Field(description="Depth score of the entity")
+    consensus_score: float = Field(description="Consensus score of the entity")
+    global_score: float = Field(description="Global score of the entity")
+    agreement_score: float = Field(description="Anchor agreement score of the entity")
     vendor_id: Optional[str] = Field(default=None, description="Vendor entity ID")
+
 
 class SchemaRecord(BaseSchema):
     anchor_entity: ModelEntityID = Field(description="Anchor Entity UEI")
-    alt_entities: list[ModelEntityID] = Field(description="List of non-anchor entities within the cluster")
-    splink_id: Optional[str] = Field(description="Splink ID if sourced from links. This is transient and is newly derived in each Splink run and is used exclusively for auditing the ER process")
+    alt_entities: Optional[list[ModelEntityID]] = Field(default=None, description="List of non-anchor entities within the cluster")
+    splink_id: Optional[str] = Field(
+        description="Splink ID if sourced from links. This is transient and is newly derived in each Splink run and is used exclusively for auditing the ER process"
+    )
     has_id_conflict: bool = Field(default=False)
 
     company_name: str = Field(description="Entity name")
@@ -60,7 +63,6 @@ class SchemaRecord(BaseSchema):
     licenses: Optional[list[ModelLicense]] = Field(default=None)
     certification_type: Optional[str] = Field(default=None)
     trade_specialty: Optional[str] = Field(default=None)
-
 
 
 class Record(BaseRecord):
@@ -89,7 +91,7 @@ class Record(BaseRecord):
         LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR,
     }
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
-    _anchor_data_sources: ClassVar[set[str]] = {"business_entity_registry",'sub_contractors_registry'}
+    _anchor_data_sources: ClassVar[set[str]] = {"business_entity_registry", "sub_contractors_registry"}
     _data_source: ClassVar[str] = "gold_business_entity"
     _primary_key: ClassVar[str] = "entity_id"
     _partition_key: ClassVar[str] = "city"
@@ -97,7 +99,9 @@ class Record(BaseRecord):
     # entity integration information
     anchor_entity: ModelEntityID = Field(description="Anchor Entity UEI")
     alt_entities: list[ModelEntityID] = Field(description="List of non-anchor entities within the cluster")
-    splink_id: Optional[str] = Field(description="Splink ID if sourced from links. This is transient and is newly derived in each Splink run and is used exclusively for auditing the ER process")
+    splink_id: Optional[str] = Field(
+        description="Splink ID if sourced from links. This is transient and is newly derived in each Splink run and is used exclusively for auditing the ER process"
+    )
     has_id_conflict: bool = Field(default=False)
 
     # survivorship fields
@@ -105,7 +109,7 @@ class Record(BaseRecord):
     address_1: Optional[str] = Field(default=None)
     postal_code: Optional[str] = Field(default=None)
     city: Optional[str] = Field(default=None)
-    is_active: Optional[bool] = Field(default=None)
+    is_active: Optional[bool] = Field(default=False)
     naics_code: Optional[str] = Field(default=None)
     naics_code_label: Optional[str] = Field(default=None)
     licenses: Optional[list[ModelLicense]] = Field(default=None)
@@ -152,12 +156,14 @@ class Record(BaseRecord):
     def rank_and_select_anchor(list_records: list[dict]) -> dict:
         data_keys = Record.get_data_keys(list_records)
         # gets per-field and per-field value count
-        agreement_map = {field: Counter([str(record[field]).strip().upper() for record in list_records if record.get(field)])for field in data_keys}
+        agreement_map = {field: Counter([str(record[field]).strip().upper() for record in list_records if record.get(field)]) for field in data_keys}
         num_records = len(list_records)
         for record in list_records:
             record[LINK_RECORD_DEPTH_SCORE_STR] = Record.calculate_completeness(record=record, valid_data_keys=data_keys)
             # Consensus = sum of agreements from peers
-            record[LINK_RECORD_CONSENSUS_SCORE_STR] = Record.calculate_global_consensus(record=record, num_records=num_records, agreement_map=agreement_map)
+            record[LINK_RECORD_CONSENSUS_SCORE_STR] = Record.calculate_global_consensus(
+                record=record, num_records=num_records, agreement_map=agreement_map
+            )
             # Total score
             record[LINK_RECORD_GLOBAL_SCORE_STR] = (record[LINK_RECORD_DEPTH_SCORE_STR] + 2 * record[LINK_RECORD_CONSENSUS_SCORE_STR]) / 3
         # we define an anchor record since these correspond to actual business entities
@@ -165,8 +171,8 @@ class Record(BaseRecord):
         # if there are no anchor records, we assume it's not a valid record
         # ! this obviously depends on business-specific decisions
         if not valid_anchor_records:
-            raise Exception('Missing anchor, dropping record...')
-        anchor = max(valid_anchor_records, key=lambda x: (x[LINK_RECORD_GLOBAL_SCORE_STR]))
+            raise Exception("Missing anchor, dropping record...")
+        anchor = max(valid_anchor_records, key=lambda x: x[LINK_RECORD_GLOBAL_SCORE_STR])
         anchor[LINK_RECORD_IS_PRIMARY_STR] = True
         return anchor
 
@@ -185,54 +191,52 @@ class Record(BaseRecord):
         return agree_count / compare_count if compare_count > 0 else 0.0
 
     def get_collapsed_dict(anchor: dict, sorted_records: list[dict]) -> dict:
-        anchor_entity = ModelEntityID(entity_id=anchor[Record._primary_key],
-                                      data_source=anchor[DATA_SOURCE_STR],
-                                      depth_score=anchor[LINK_RECORD_DEPTH_SCORE_STR],
-                                      consensus_score=anchor[LINK_RECORD_CONSENSUS_SCORE_STR],
-                                      global_score=anchor[LINK_RECORD_GLOBAL_SCORE_STR],
-                                      # since it's the anchor
-                                      agreement_score=1.0,
-                                      )
+        anchor_entity = ModelEntityID(
+            entity_id=anchor[Record._primary_key],
+            data_source=anchor[DATA_SOURCE_STR],
+            depth_score=anchor[LINK_RECORD_DEPTH_SCORE_STR],
+            consensus_score=anchor[LINK_RECORD_CONSENSUS_SCORE_STR],
+            global_score=anchor[LINK_RECORD_GLOBAL_SCORE_STR],
+            # since it's the anchor
+            agreement_score=1.0,
+            vendor_id=anchor.get("vendor_id"),
+        )
         alt_entities = []
         for record in sorted_records:
             if record.get(Record._primary_key):
-                alt_entity = ModelEntityID(entity_id=record[Record._primary_key],
-                                           data_source=record[DATA_SOURCE_STR],
-                                           depth_score=record[LINK_RECORD_DEPTH_SCORE_STR],
-                                           consensus_score=record[LINK_RECORD_CONSENSUS_SCORE_STR],
-                                           global_score=record[LINK_RECORD_GLOBAL_SCORE_STR],
-                                           agreement_score=record[LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR],
-                                           vendor_id=record.get('vendor_id'),
-                                           )
+                alt_entity = ModelEntityID(
+                    entity_id=record[Record._primary_key],
+                    data_source=record[DATA_SOURCE_STR],
+                    depth_score=record[LINK_RECORD_DEPTH_SCORE_STR],
+                    consensus_score=record[LINK_RECORD_CONSENSUS_SCORE_STR],
+                    global_score=record[LINK_RECORD_GLOBAL_SCORE_STR],
+                    agreement_score=record[LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR],
+                    vendor_id=record.get("vendor_id"),
+                )
                 alt_entities.append(alt_entity)
-        res = {
-            "anchor_entity": anchor_entity,
-            "alt_entities": alt_entities,
-            "splink_id": anchor[CLUSTER_ID_STR],
-            "licenses": []
-        }
-
-        data_keys = Record.get_data_keys(sorted_records)
+        res = {"anchor_entity": anchor_entity, "alt_entities": alt_entities, "splink_id": anchor[CLUSTER_ID_STR], "licenses": []}
         licenses = []
         seen_license_ids = set()
-        filled_keys = set()
-        fields_to_reject = {'license_id', 'expiration_date'}
-        for record in sorted_records:
+        fields_to_reject = {"license_id", "expiration_date"}
+        all_records = [anchor] + sorted_records
+        data_keys = Record.get_data_keys(all_records)
+        for record in all_records:
             # A. Aggregation: Collect all unique licenses across the cluster
             if record[DATA_SOURCE_STR] == ModelLicense._data_source:
-                license_id = record.get('license_id')
+                license_id = record.get("license_id")
                 if license_id and license_id not in seen_license_ids:
-                    licenses.append(ModelLicense(license_id=license_id, expiration_date=record.get('expiration_date')))
+                    licenses.append(ModelLicense(license_id=license_id, expiration_date=record.get("expiration_date")))
                     seen_license_ids.add(license_id)
             # B. Survivorship: Fill fields from highest-ranked record first
             # TODO improve survivorship rules, potentially on a per-field basis
             for k in data_keys:
-                if k not in filled_keys and k not in fields_to_reject:
+                if k in fields_to_reject:
+                    continue
+                if res.get(k) in (None, ""):
                     record_value = record.get(k)
                     if record_value not in (None, ""):
                         res[k] = record_value
-                        filled_keys.add(k)
-        res['licenses'] = licenses
+        res["licenses"] = licenses
         return res
 
     @classmethod
@@ -247,13 +251,24 @@ class Record(BaseRecord):
         if not list_records:
             raise ValueError("Cannot process an empty cluster")
         anchor: dict = cls.rank_and_select_anchor(list_records=list_records)
+        # print('anchor', anchor)
+        # print('list_records',list_records)
+        # raise Exception
         if not anchor:
-            raise Exception(f'Anchor record not found for {list_records}')
+            raise Exception(f"Anchor record not found for {list_records}")
         data_keys = Record.get_data_keys(list_records)
         for record in list_records:
             record[LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR] = cls.calculate_anchor_agreement(record=record, anchor=anchor, data_keys=data_keys)
+        filtered_records = [r for r in list_records if r.get(LINK_RECORD_IS_PRIMARY_STR) is False]
         # Sort for survivorship: Anchor first, then highest global score
-        sorted_records = sorted(list_records, key=lambda x: (x.get(LINK_RECORD_IS_PRIMARY_STR, False), x[LINK_RECORD_GLOBAL_SCORE_STR],),reverse=True)
+        sorted_records = sorted(
+            filtered_records,
+            key=lambda x: (
+                x.get(LINK_RECORD_IS_PRIMARY_STR, False),
+                x[LINK_RECORD_GLOBAL_SCORE_STR],
+            ),
+            reverse=True,
+        )
         record_data = cls.get_collapsed_dict(anchor=anchor, sorted_records=sorted_records)
         return cls(**record_data)
 
@@ -271,7 +286,7 @@ class Record(BaseRecord):
     @model_serializer(mode="plain")
     def serialize_model(self) -> dict[str, Any]:
         """
-        Serializes the integrated record into a flat dictionary with 
+        Serializes the integrated record into a flat dictionary with
         nested dictionaries for Struct/List conversion in PyArrow.
         """
         return {
@@ -279,18 +294,15 @@ class Record(BaseRecord):
             "has_id_conflict": self.has_id_conflict,
             "anchor_entity": self.anchor_entity.model_dump(),
             "alt_entities": [entity.model_dump() for entity in self.alt_entities] if self.alt_entities else None,
-
             "company_name": self.company_name,
             "address_1": self.address_1,
             "postal_code": self.postal_code,
             "city": self.city,
             "is_active": self.is_active,
-
             "naics_code": self.naics_code,
             "naics_code_label": self.naics_code_label,
             "certification_type": self.certification_type,
             "trade_specialty": self.trade_specialty,
-
             "licenses": [lic.model_dump() for lic in self.licenses] if self.licenses else None,
         }
 

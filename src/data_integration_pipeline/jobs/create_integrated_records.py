@@ -3,7 +3,6 @@ from data_integration_pipeline.settings import ENTITY_RESOLUTION_DATA_FOLDER, DA
 import os
 from data_integration_pipeline.io.file_reader import S3FileReader
 from data_integration_pipeline.core.entity_resolution.links_processor import LinksProcessor
-from datetime import datetime
 from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunMetadata
 from data_integration_pipeline.core.entity_resolution.integrated_record import Record
 from data_integration_pipeline.io.logger import logger
@@ -16,16 +15,17 @@ class CreateIntegratedRecords:
     """
     Processes links and merges all data to create integrated records data
     """
+
     # we could add a locking mechanism (to avoid racing conditions during parallel work) like in here  https://github.com/PedroMTQ/helical_pdqueiros/blob/main/src/helical_pdqueiros but this is simpler in a POC
     def __init__(self):
         self.s3_client = S3Client()
 
     def process_data(self, metadata: SplinkRunMetadata) -> str:
-        logger.info(f'Processing {metadata}')
+        logger.info(f"Processing {metadata}")
         db_path = os.path.join(TEMP, ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, "records.duckdb")
         processor = LinksProcessor(metadata=metadata, bucket_name=DATA_BUCKET, db_path=db_path)
-        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, 'errors.parquet')
-        integrated_records_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, 'integrated_records.parquet')
+        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, "errors.parquet")
+        integrated_records_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, metadata.run_id, "integrated_records.parquet")
         fail_writer = S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET)
         integrated_records_writer = S3FileWriter(s3_path=integrated_records_s3_path, bucket_name=DATA_BUCKET)
         metrics = Metrics()
@@ -40,8 +40,8 @@ class CreateIntegratedRecords:
                     metrics.log_result(is_success=True)
                 except Exception as e:
                     # TODO change to error when we have better datas
-                    logger.debug(f'Error processing integrated record: {record} with cluster {cluster} due to  {e}')
-                    cluster_dict = {"cluster_id": [i.get('cluster_id') for i in cluster][0], 'data': cluster}
+                    logger.debug(f"Error processing integrated record: {record} with cluster {cluster} due to  {e}")
+                    cluster_dict = {"cluster_id": [i.get("cluster_id") for i in cluster][0], "data": cluster}
                     errors_writer.write_row(cluster_dict)
                     metrics.log_result(is_success=False)
         logger.info(f"Processed {metadata.run_id} and wrote output to {integrated_records_s3_path}. File metrics: {metrics}")

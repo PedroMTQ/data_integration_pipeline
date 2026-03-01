@@ -1,9 +1,11 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from data_integration_pipeline.settings import (
     SERVICE_NAME,
     CODE_VERSION,
     SPLINK_CLUSTERING_THRESHOLD,
-    SPLINK_INFERENCE_PREDICT_THRESHOLD,ENTITY_RESOLUTION_DATA_FOLDER, PARQUET_TABLE_SUFFIX
+    SPLINK_INFERENCE_PREDICT_THRESHOLD,
+    ENTITY_RESOLUTION_DATA_FOLDER,
+    PARQUET_TABLE_SUFFIX,
 )
 import os
 import sys
@@ -23,6 +25,7 @@ class SplinkRunMetadata:
     inputs: dict
     outputs: dict
     model_metadata: dict
+    overlap_report: dict = None
 
     @classmethod
     def from_splink(
@@ -34,6 +37,7 @@ class SplinkRunMetadata:
         links_count: int,
         clusters_count: int,
         records_count: dict[str, int],
+        overlap_report: dict[str, int],
     ) -> "SplinkRunMetadata":
         """
         Factory method to 'unpack' Splink objects into this metadata class.
@@ -58,6 +62,7 @@ class SplinkRunMetadata:
                 "splink_clustering_threshold": SPLINK_CLUSTERING_THRESHOLD,
                 "settings_hash": settings_hash,
             },
+            overlap_report=overlap_report,
         )
 
     def to_dict(self) -> dict:
@@ -74,4 +79,4 @@ class SplinkRunMetadata:
     @property
     def integrated_records_s3_path(self) -> float:
         """Business Metric: What percentage of records were successfully linked?"""
-        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f'integrated_records{PARQUET_TABLE_SUFFIX}')
+        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"integrated_records{PARQUET_TABLE_SUFFIX}")

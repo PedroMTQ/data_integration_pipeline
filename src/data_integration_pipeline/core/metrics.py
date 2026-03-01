@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+
 # TODO you'd want to have a connnection to prometheus or OTEL
 @dataclass
 class Metrics:
