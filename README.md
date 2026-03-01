@@ -12,8 +12,7 @@
 
 
 # TODO
-- create id bridge
-- create master view
+- improve efficeincy of create_gold_records
 - add airflow?
 - readme
 
