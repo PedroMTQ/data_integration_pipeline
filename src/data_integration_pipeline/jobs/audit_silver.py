@@ -11,7 +11,7 @@ from data_integration_pipeline.io.s3_client import S3Client
 from data_integration_pipeline.settings import SILVER_DATA_FOLDER, AUDIT_TOTAL_ROWS
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3WeightedParquetSampler
-
+import pyarrow as pa
 from data_integration_pipeline.io.logger import logger
 
 
@@ -51,7 +51,7 @@ class AuditSilverDataJob:
             target_total_rows=AUDIT_TOTAL_ROWS,
         )
         data_auditor = DataAuditor(data_model=data_model, dataset_stage="silver", additional_rules=self.additional_rules)
-        data_sample = s3_sampler.get_data()
+        data_sample: Iterator[pa.RecordBatch] = s3_sampler.get_data()
         data_auditor.run(data=data_sample)
         data_auditor.export_docs()
 

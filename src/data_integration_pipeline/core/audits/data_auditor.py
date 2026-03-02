@@ -1,6 +1,6 @@
 import fnmatch
 import os
-from typing import Any, Iterable, Type, Literal
+from typing import Any, Type, Literal, Iterator
 
 import great_expectations as gx
 import pyarrow as pa
@@ -234,14 +234,14 @@ class DataAuditor:
     def export_docs(self):
         self.context.build_data_docs()
 
-    def run(self, data: Iterable[pa.Table]) -> bool:
+    def run(self, data: Iterator[pa.RecordBatch]) -> bool:
         self.__setup_data_source()
         self.__setup_suite()
         self.__setup_data_asset()
         self.__setup_batch_def()
         self.__setup_val_definition()
         # TODO gx db engines are not great for my current setup, consider improving this. but it should be ok for the amount of data we audit
-        df = pa.concat_tables(data).to_pandas()
+        df = pa.Table.from_batches(data).to_pandas()
         results = self.val_definition.run(batch_parameters={"dataframe": df}, run_id=self.run_id)
         return self.__process_results(results=results.get("results", {}))
 

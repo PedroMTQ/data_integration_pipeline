@@ -7,34 +7,34 @@ x-common-minio: &common-minio
   image: quay.io/minio/minio:RELEASE.2025-01-20T14-49-07Z
 
 services:
-  postgres:
-    <<: *common-infra
-    container_name: data-integration-postgres
-    image: postgres:16.4-bullseye
-    shm_size: 1g
-    ports:
-      - ${POSTGRES_HOST}:${POSTGRES_PORT}:5432
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DATABASE}
-      - PGDATA=/var/lib/postgresql/data
-    volumes:
-      - ./data/postgres/data/:/var/lib/postgresql/data
-    # healthcheck:
-    #   test: ["CMD-SHELL", "pg_isready", "-d", "data"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # postgres:
+  #   <<: *common-infra
+  #   container_name: data-integration-postgres
+  #   image: postgres:16.4-bullseye
+  #   shm_size: 1g
+  #   ports:
+  #     - ${POSTGRES_HOST}:${POSTGRES_PORT}:5432
+  #   environment:
+  #     - POSTGRES_USER=${POSTGRES_USER}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  #     - POSTGRES_DB=${POSTGRES_DATABASE}
+  #     - PGDATA=/var/lib/postgresql/data
+  #   volumes:
+  #     - ./data/postgres/data/:/var/lib/postgresql/data
+  #   # healthcheck:
+  #   #   test: ["CMD-SHELL", "pg_isready", "-d", "data"]
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   minio:
     <<: [*common-infra, *common-minio]
     container_name: data-integration-minio
     environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     ports:
       - "${S3_PORT}:9000" # S3 API

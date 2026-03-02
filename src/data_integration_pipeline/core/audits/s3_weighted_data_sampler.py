@@ -84,10 +84,9 @@ class S3WeightedParquetSampler:
         """Streams and samples using Polars for vectorized math and distribution."""
         if self._is_sampled:
             return
-        data = self.delta_client.read(table_path=self.s3_path)
+        data: Iterator[pa.RecordBatch] = self.delta_client.read(table_path=self.s3_path)
         for table in data:
             df = pl.from_arrow(table)
-
             batch_counts = df.select(pl.col(self.weight_column).cast(pl.Utf8).value_counts()).unnest(self.weight_column)
             self.raw_counts_list.append(batch_counts)
 
@@ -111,7 +110,7 @@ class S3WeightedParquetSampler:
 
         self._is_sampled = True
 
-    def get_data(self) -> Iterable[pa.Table]:
+    def get_data(self) -> pa.RecordBatchReader:
         """
         Retrieves the winning records from the Delta Table using the stored keys.
         """

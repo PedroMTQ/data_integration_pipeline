@@ -15,7 +15,7 @@ class ModelMapper:
         re.compile(r"business_entity_registry.*", re.IGNORECASE): BusinessEntityRegistryRecord,
         re.compile(r"licenses.*", re.IGNORECASE): LicensesRegistryRecord,
         re.compile(r"sub_contractor.*", re.IGNORECASE): SubContractorsRegistryRecord,
-        re.compile(r"(gold_business_entity|integrated_records).*", re.IGNORECASE): IntegratedRecord,
+        re.compile(r"(gold_business_entity|(deduplicated|integrated)_records).*", re.IGNORECASE): IntegratedRecord,
     }
 
     @staticmethod

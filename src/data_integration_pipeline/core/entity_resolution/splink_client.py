@@ -14,8 +14,6 @@ from data_integration_pipeline.settings import (
     CLUSTER_ID_STR,
     LINKS_MODEL_FILE_NAME,
     DATA_BUCKET,
-    SPLINK_CLUSTERING_THRESHOLD,
-    SPLINK_INFERENCE_PREDICT_THRESHOLD,
 )
 import os
 from data_integration_pipeline.io.logger import logger
@@ -23,11 +21,15 @@ import duckdb
 from splink import Linker, DuckDBAPI, SettingsCreator
 import uuid6
 from collections import defaultdict
+from splink import block_on
+
 
 class SplinkClient:
-    def __init__(self, table_names: list[str], settings: SettingsCreator):
+    def __init__(self, table_names: list[str], settings: SettingsCreator, clustering_threshold: float, inference_threshold: float):
         self.table_names = table_names
         self.settings = settings
+        self.clustering_threshold = clustering_threshold
+        self.inference_threshold = inference_threshold
         self.s3_client = S3Client()
         self.delta_client = DeltaClient()
         self.db_path = os.path.join(ER_TEMP, "splink", "er.duckdb")
@@ -53,7 +55,7 @@ class SplinkClient:
     def set_to_master_schema(data: Iterable[pa.Table], primary_key: str, table_name: str, schema: pa.Schema):
         for batch in data:
             batch = batch.append_column("unique_id", batch.column(primary_key).cast(pa.string()))
-            batch = batch.append_column("source_dataset", pa.array([table_name] * batch.num_rows))
+            batch = batch.append_column("data_source", pa.array([table_name] * batch.num_rows))
             for field in schema:
                 if field.name not in batch.column_names:
                     null_array = pa.nulls(batch.num_rows, type=field.type)
@@ -67,7 +69,7 @@ class SplinkClient:
             for field in schema:
                 if field.name not in all_fields:
                     all_fields[field.name] = field.type
-        required_extras = {"unique_id": pa.string(), "source_dataset": pa.string()}
+        required_extras = {"unique_id": pa.string(), "data_source": pa.string()}
         all_fields.update(required_extras)
         return pa.schema([(name, dtype) for name, dtype in all_fields.items()])
 
@@ -95,25 +97,33 @@ class SplinkClient:
     def get_linker(self, db_api, table_names: list[str], model_path: str, weights_html_path: str):
         if os.path.exists(model_path):
             logger.info(f"Loading pre-trained model from {model_path}")
-            return Linker(table_names, model_path, db_api=db_api)
+            return Linker(table_names, settings=model_path, db_api=db_api)
 
-        linker = Linker(table_names, self.settings, db_api=db_api)
+        linker = Linker(table_names, settings=self.settings, db_api=db_api)
+
+        deterministic_rules = [
+            block_on("entity_id"),
+            block_on("company_name_normalized", "city"),
+            block_on("company_name_normalized", "substr(address_1, 1, 5)"),
+        ]
+        linker.training.estimate_probability_two_random_records_match(deterministic_rules, recall=0.7)
+
         linker.training.estimate_u_using_random_sampling(max_pairs=1e7)
-        # 2. EM Session 1: Block on Name
-        # This trains the 'entity_id' parameters.
-        # Because many records with the same name will have DIFFERENT IDs,
-        # the model now sees enough 'non-matches' to train the Else level.
-        linker.training.estimate_parameters_using_expectation_maximisation("l.company_name_normalized = r.company_name_normalized")
 
-        # 3. EM Session 2: Block on Postal Code (or another column)
-        # This trains the 'company_name_normalized' parameters.
-        # It allows the model to see name variations (typos) for the same location.
-        linker.training.estimate_parameters_using_expectation_maximisation("l.city = r.city")
+        # EM Session 1: Block on exact Name
+        # This block has plenty of data across ALL THREE datasets.
+        # It will successfully train 'entity_id', 'city', and 'address_1'
+        linker.training.estimate_parameters_using_expectation_maximisation(block_on("company_name_normalized"))
 
-        # 4. EM Session 3: Block on entity_id
-        # This helps refine weights for other columns (like City/Address)
-        # while matching on a very strong identifier.
-        linker.training.estimate_parameters_using_expectation_maximisation("l.entity_id = r.entity_id")
+        # EM Session 2: Block on Entity ID
+        # This block spans Business <-> Subs (and within).
+        # It trains 'company_name_normalized' by looking at pairs with the same UEI.
+        linker.training.estimate_parameters_using_expectation_maximisation(block_on("entity_id"))
+
+        # EM Session 3: Block on fuzzy Name (First 4 chars)
+        # This casts a wide net to train variations across all features.
+        linker.training.estimate_parameters_using_expectation_maximisation(block_on("substr(company_name_normalized, 1, 4)"))
+
         linker.misc.save_model_to_json(model_path, overwrite=True)
         linker.visualisations.match_weights_chart().save(weights_html_path)
         logger.info(f"Trained model saved to {model_path}")
@@ -123,7 +133,7 @@ class SplinkClient:
         sql = f"""
             SELECT
                 cluster_id,
-                source_dataset,
+                data_source,
                 unique_id
             FROM {df_clusters.physical_name}
             ORDER BY cluster_id
@@ -134,20 +144,20 @@ class SplinkClient:
         for pa_table in raw_linkage:
             pa_table = pa_table.to_pylist()
             for row in pa_table:
-                primary_key_type = self.data_models_primary_keys[row["source_dataset"]]
+                primary_key_type = self.data_models_primary_keys[row["data_source"]]
                 row = {
                     CLUSTER_ID_STR: row["cluster_id"],
                     "primary_key_id": row["unique_id"],
                     "primary_key_type": primary_key_type,
-                    "data_source": row["source_dataset"],
+                    "data_source": row["data_source"],
                 }
-                cluster_map[row['cluster_id']].add(row['data_source'])
+                cluster_map[row["cluster_id"]].add(row["data_source"])
                 yield row
         for sources in cluster_map.values():
             # Create a sorted string signature like "registry_a + registry_b"
             signature = " + ".join(sorted(list(sources)))
             overlap_counts[signature] += 1
-        self.overlap_report = overlap_counts
+        self.overlap_report = dict(overlap_counts)
 
     def get_clusters_count(self, df_clusters, db_connection) -> int:
         """
@@ -165,8 +175,6 @@ class SplinkClient:
     def generate_run_metadata(
         self, links_s3_path: str, table_names, linker: Linker, links_count: int, clusters_count: int, records_count: dict[str, int]
     ) -> dict:
-        print('here', self.overlap_report)
-        raise Exception
         return SplinkRunMetadata.from_splink(
             run_id=self.run_id,
             links_s3_path=links_s3_path,
@@ -200,6 +208,8 @@ class SplinkClient:
         logger.info(f"Wrote model to {s3_path}")
         return s3_path
 
+    # def generate_links(self)
+
     def run(self):
         # we retrain all the time, but in a prod env, we would stick with a pre-trained EM model
         table_names = self.write_tables()
@@ -211,15 +221,12 @@ class SplinkClient:
         linker = self.get_linker(db_api=db_api, table_names=table_names, model_path=model_path, weights_html_path=weights_html_path)
         logger.info("Starting Splink prediction...")
 
-        predictions = linker.inference.predict(threshold_match_probability=SPLINK_INFERENCE_PREDICT_THRESHOLD)
-        df_clusters = linker.clustering.cluster_pairwise_predictions_at_threshold(
-            predictions, threshold_match_probability=SPLINK_CLUSTERING_THRESHOLD
-        )
+        predictions = linker.inference.predict(threshold_match_probability=self.inference_threshold)
+        df_clusters = linker.clustering.cluster_pairwise_predictions_at_threshold(predictions, threshold_match_probability=self.clustering_threshold)
         links_data = self.yield_clustered_records(df_clusters=df_clusters, db_connection=db_connection)
         links_s3_path = self.write_links(links_data=links_data)
-        links_count=self.get_links_count(df_clusters=df_clusters, db_connection=db_connection),
-        clusters_count=self.get_clusters_count(df_clusters=df_clusters, db_connection=db_connection),
-        print('overlap_report', self.overlap_report)
+        links_count = (self.get_links_count(df_clusters=df_clusters, db_connection=db_connection),)
+        clusters_count = self.get_clusters_count(df_clusters=df_clusters, db_connection=db_connection)
         run_metadata = self.generate_run_metadata(
             links_s3_path=links_s3_path,
             table_names=table_names,
@@ -228,8 +235,7 @@ class SplinkClient:
             clusters_count=clusters_count,
             records_count=self.records_count,
         )
-        logger.info(f'Splink run results: {run_metadata}')
-
+        logger.info(f"Splink run results: {run_metadata}")
         self.write_metadata(run_metadata=run_metadata)
         self.write_model(linker=linker)
         return links_s3_path

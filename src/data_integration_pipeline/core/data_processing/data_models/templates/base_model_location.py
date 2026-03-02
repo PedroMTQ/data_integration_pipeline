@@ -18,9 +18,6 @@ from data_integration_pipeline.core.data_processing.features_extraction.location
 )
 
 
-ADDRESS_PARSER = LocationParser()
-
-
 class BaseModelLocation(BaseModel):
     model_config = BASE_CONFIG_DICT
     location: SoftStr = Field(default=None, description="Location", min_length=MIN_LENGTH_ADDRESS_1, exclude=True)
@@ -29,7 +26,7 @@ class BaseModelLocation(BaseModel):
     @model_validator(mode="after")
     def set_parsed_address(self) -> "BaseModelLocation":
         if self.parsed_address is None and self.location:
-            self.parsed_address = asdict(ADDRESS_PARSER.parse(self.location))
+            self.parsed_address = asdict(LocationParser().parse(self.location))
         return self
 
     @model_serializer(mode="plain")

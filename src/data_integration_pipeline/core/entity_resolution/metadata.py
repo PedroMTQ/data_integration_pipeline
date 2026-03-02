@@ -70,7 +70,6 @@ class SplinkRunMetadata:
 
     @property
     def linkage_rate(self) -> float:
-        """Business Metric: What percentage of records were successfully linked?"""
         total_in = self.inputs["records_count"]
         if total_in == 0:
             return 0.0
@@ -78,5 +77,8 @@ class SplinkRunMetadata:
 
     @property
     def integrated_records_s3_path(self) -> float:
-        """Business Metric: What percentage of records were successfully linked?"""
         return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"integrated_records{PARQUET_TABLE_SUFFIX}")
+
+    @property
+    def deduplicated_records_s3_path(self) -> float:
+        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"deduplicated_records{PARQUET_TABLE_SUFFIX}")

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import Union
+from typing import Union, Iterator
 
 import polars as pl
 import pyarrow as pa
@@ -93,7 +93,7 @@ class DeltaClient:
             # schema_mode="overwrite" allows schema evolution if the integrated record model changes
             schema_mode="overwrite",
         )
-        logger.info(f"Overwrote Gold table {s3_path} with {len(data)} integrated records.")
+        logger.info(f"Overwrote table {s3_path} with {len(data)} integrated records.")
 
     def write(self, s3_path: str, data: pa.Table, primary_key: str = None, partition_key: str = None, add_metadata_columns: bool = True):
         """
@@ -131,7 +131,7 @@ class DeltaClient:
 
     def read(
         self, table_path: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None
-    ) -> pa.RecordBatchReader:
+    ) -> Iterator[pa.RecordBatch]:
         """
         Direct Arrow streaming from Delta Lake.
         Zero Polars, Zero memory overhead.
@@ -152,42 +152,7 @@ class DeltaClient:
         filter_expr = None
         if keys and key_column:
             filter_expr = ds.field(key_column).isin(keys)
-        return dt.to_pyarrow_dataset().to_batches(columns=columns, filter=filter_expr, batch_size=self.batch_size)
-
-    # TODO test and drop
-    # def read2(
-    #     self,
-    #     table_path: str,
-    #     columns: list = None,
-    #     keys: list = None,
-    #     key_column: str = None,
-    #     version: Union[int, datetime] = None,
-    #     drop_versioning_cols: bool = True,
-    # ) -> Iterable[pa.Table]:
-    #     """
-    #     Unified read method using Polars.
-    #     Handles fragmentation by re-batching and lookups via predicate pushdown.
-    #     """
-    #     data_model = ModelMapper.get_data_model(table_path)
-    #     partition_key = data_model._partition_key
-    #     if key_column or keys:
-    #         if not (key_column and keys):
-    #             raise Exception("When filtering data, you need to provide the keys and key_column")
-    #     uri = self._get_uri(table_path)
-    #     lf = pl.scan_delta(uri, storage_options=self.storage_options, version=version)
-    #     # we drop the unknown partition key
-    #     if partition_key in lf.collect_schema().names():
-    #         lf = lf.with_columns(pl.col(partition_key).replace(UNKNOWN_PARTITION_STR, None).alias(partition_key))
-    #     if columns:
-    #         lf = lf.select(columns)
-    #     if drop_versioning_cols:
-    #         cols_to_drop = [c for c in [HASH_DIFF_COLUMN, LDTS_COLUMN] if c in lf.collect_schema().names()]
-    #         lf = lf.drop(cols_to_drop)
-    #     if keys:
-    #         lf = lf.filter(pl.col(key_column).is_in(keys))
-    #     df = lf.collect()
-    #     for sub_df in df.iter_slices(n_rows=self.batch_size):
-    #         yield sub_df.to_arrow()
+        return dt.to_pyarrow_dataset().to_batches(columns=projection, filter=filter_expr, batch_size=self.batch_size)
 
     def rollback(self, table_name: str, version: int = None, timestamp: datetime = None):
         """Restores table to a previous state using Delta Time Travel."""
@@ -203,20 +168,28 @@ class DeltaClient:
 
 
 if __name__ == "__main__":
+    from data_integration_pipeline.io.file_writer import LocalFileWriter
+    from data_integration_pipeline.settings import TEMP
+
     client = DeltaClient()
     data = client.read(
-        table_path="silver/business_entity_registry/business_entity_registry.delta",
+        table_path="data_mart/gold_business_entity/gold_business_entity.delta",
     )
-    for batch in data:
+    print(pa.Table.from_batches(data).shape)
+    data = client.read(
+        table_path="data_mart/gold_business_entity/id_bridge.delta",
+    )
+    print(pa.Table.from_batches(data).shape)
+    # writer = LocalFileWriter(file_path=f"{TEMP}/gold_business_entity/gold_business_entity.parquet")
+    # for batch in data:
+    #     writer.write_table(batch)
         # print(batch)
-        print([i.get("city") for i in batch.to_pylist()])
-    # data = client.read(
-    #     table_path="silver/licenses_registry/licenses_registry.delta",
-    # )
-    # for batch in data:
-    #     print([i.get("city") for i in batch.to_pylist()])
-    # data = client.read(
-    #     table_path="silver/sub_contractors_registry/sub_contractors_registry.delta",
-    # )
-    # for batch in data:
-    #     print([i.get("city") for i in batch.to_pylist()])
+    # data_sources = ["business_entity_registry", "licenses_registry", "sub_contractors_registry"]
+    # for data_source in data_sources:
+    #     data = client.read(
+    #         table_path=f"silver/{data_source}/{data_source}.delta",
+    #     )
+    #     writer = LocalFileWriter(file_path=f"{TEMP}/silver/{data_source}.parquet")
+    #     for batch in data:
+    #         writer.write_table(batch)
+    #     # print(batch)

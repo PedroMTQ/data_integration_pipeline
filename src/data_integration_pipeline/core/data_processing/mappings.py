@@ -18,7 +18,7 @@ class MappingsSingleton(SingletonBase):
         """Safe lookup for your Pydantic computed fields."""
         if not code:
             return None
-        return self._mapping.get(str(code))
+        return self._mapping.get(str(code).upper())
 
     @cached_property
     def _reverse_mapping(self) -> dict:
@@ -57,6 +57,16 @@ class NaicsMapping(MappingsSingleton):
         return dict(zip(df["NAICS code"], df["NAICS description"], strict=True))
 
 
+class AddressAbbreviationMapping(MappingsSingleton):
+    @cached_property
+    def _mapping(self) -> dict:
+        df = pl.read_csv(
+            os.path.join(SRC_DATA, "address_abbreviations_mapping.csv"),
+            schema_overrides={"abbreviation": pl.String, "term": pl.String},
+        )
+        return dict(zip(df["abbreviation"], df["term"], strict=True))
+
+
 if __name__ == "__main__":
     naics_mapping = NaicsMapping()
     print("1", id(naics_mapping), naics_mapping)
@@ -65,3 +75,11 @@ if __name__ == "__main__":
     naics_mapping = NaicsMapping()
     print("3", id(naics_mapping), naics_mapping)
     print("code lookup", naics_mapping.get_code("Structural Stel and precast Concryt Contractors"))
+
+    address_abbreviation_mapping = AddressAbbreviationMapping()
+    print("1", id(address_abbreviation_mapping), address_abbreviation_mapping)
+    print(address_abbreviation_mapping.get_label("ALY"))
+    print("2", id(address_abbreviation_mapping), address_abbreviation_mapping)
+    address_abbreviation_mapping = AddressAbbreviationMapping()
+    print("3", id(address_abbreviation_mapping), address_abbreviation_mapping)
+    print("code lookup", address_abbreviation_mapping.get_code("Alley"))

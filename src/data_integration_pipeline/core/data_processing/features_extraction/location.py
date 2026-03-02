@@ -3,7 +3,33 @@ from typing import Literal, Optional
 from dataclasses import dataclass, fields
 from scourgify import normalize_address_record
 from data_integration_pipeline.core.singletons_base import SingletonBase
+from data_integration_pipeline.core.data_processing.mappings import AddressAbbreviationMapping
 from data_integration_pipeline.io.logger import logger
+import re
+
+
+class AddressStandardizer(SingletonBase):
+    def __init__(self):
+        self.mapper = AddressAbbreviationMapping()
+        self.word_pattern = re.compile(r"([^,.\s#]+)(.*)")
+
+    def replace_abbreviations(self, address: str) -> str:
+        if not address:
+            return address
+        tokens = address.split()
+        standardized_tokens = []
+        for token in tokens:
+            match = self.word_pattern.match(token)
+            if match:
+                word, punctuation = match.groups()
+                expanded = self.mapper.get_label(word)
+                if expanded:
+                    standardized_tokens.append(f"{expanded}{punctuation}")
+                else:
+                    standardized_tokens.append(token)
+            else:
+                standardized_tokens.append(token)
+        return " ".join(standardized_tokens)
 
 
 @dataclass
@@ -24,7 +50,7 @@ class ParsedLocation:
     @classmethod
     def from_scourgify(cls, data: dict) -> "ParsedLocation":
         return cls(
-            address_1=data.get("address_line_1"),
+            address_1=AddressStandardizer().replace_abbreviations(data.get("address_line_1")),
             address_2=data.get("address_line_2"),
             postal_code=data.get("postal_code"),
             city=data.get("city"),
@@ -58,7 +84,15 @@ if __name__ == "__main__":
     test_address = "124 POWER AVE, SUITE B, alaska"
     parser = LocationParser()
     parsed_address = parser.parse(test_address)
+    parsed_address = parser.parse(test_address)
+    parsed_address = parser.parse(test_address)
     print(parsed_address)
     print("1", id(parser), parser.parser_type)
     parser = LocationParser(parser="test")
     print("2", id(parser), parser.parser_type)
+
+    standardizer = AddressStandardizer()
+    test_address = "124 POWER AVE, SUITE B, alaska"
+    print(standardizer.replace_abbreviations(test_address))
+    test_address = "46132"
+    print(standardizer.replace_abbreviations(test_address))

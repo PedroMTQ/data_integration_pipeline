@@ -7,6 +7,7 @@ from pydantic import (
     model_serializer,
     model_validator,
     BaseModel,
+    computed_field
 )
 from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.settings import (
@@ -116,6 +117,22 @@ class Record(BaseRecord):
     certification_type: Optional[str] = Field(default=None)
     trade_specialty: Optional[str] = Field(default=None)
 
+    @computed_field(description="Overall completeness score of the record")
+    @property
+    def global_score(self) -> float:
+        """
+        Calculates a 0.0-1.0 score based on how many fields were successfully 
+        populated during the merging process.
+        """
+        score = 0
+        total = 0
+        for f in self._pa_schema.names:
+            total += 1
+            if getattr(self, f) not in (None, ""):
+                score += 1
+        return round(score / total, 4)
+
+
     @staticmethod
     def calculate_global_consensus(record: dict, num_records: int, agreement_map: dict) -> float:
         """
@@ -214,6 +231,9 @@ class Record(BaseRecord):
                     vendor_id=record.get("vendor_id"),
                 )
                 alt_entities.append(alt_entity)
+                # if there is no vendor_id in the anchor, we take the first one we find
+                if not anchor_entity.vendor_id:
+                    anchor_entity.vendor_id = alt_entity.vendor_id
         res = {"anchor_entity": anchor_entity, "alt_entities": alt_entities, "splink_id": anchor[CLUSTER_ID_STR], "licenses": []}
         licenses = []
         seen_license_ids = set()
@@ -251,15 +271,12 @@ class Record(BaseRecord):
         if not list_records:
             raise ValueError("Cannot process an empty cluster")
         anchor: dict = cls.rank_and_select_anchor(list_records=list_records)
-        # print('anchor', anchor)
-        # print('list_records',list_records)
-        # raise Exception
         if not anchor:
             raise Exception(f"Anchor record not found for {list_records}")
         data_keys = Record.get_data_keys(list_records)
         for record in list_records:
             record[LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR] = cls.calculate_anchor_agreement(record=record, anchor=anchor, data_keys=data_keys)
-        filtered_records = [r for r in list_records if r.get(LINK_RECORD_IS_PRIMARY_STR) is False]
+        filtered_records = [r for r in list_records if r.get(LINK_RECORD_IS_PRIMARY_STR) is not True]
         # Sort for survivorship: Anchor first, then highest global score
         sorted_records = sorted(
             filtered_records,
@@ -304,6 +321,7 @@ class Record(BaseRecord):
             "certification_type": self.certification_type,
             "trade_specialty": self.trade_specialty,
             "licenses": [lic.model_dump() for lic in self.licenses] if self.licenses else None,
+            "global_score": self.global_score,
         }
 
 

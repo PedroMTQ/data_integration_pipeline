@@ -1,30 +1,43 @@
 from data_integration_pipeline.io.s3_client import S3Client
 from data_integration_pipeline.io.logger import logger
+from data_integration_pipeline.settings import SPLINK_CLUSTERING_THRESHOLD, SPLINK_INFERENCE_PREDICT_THRESHOLD
 from typing import Iterable
 from data_integration_pipeline.core.entity_resolution.splink_client import SplinkClient
 from splink import SettingsCreator
 import splink.comparison_library as cl
-
+from splink import block_on
 
 # TODO this needs to be dynamic, but for now let's leave it like this
 # TODO this is also just a POC, it doesn't work that well
+
+
+blocking_rules_to_generate_predictions = [
+    block_on("entity_id"),
+    block_on("company_name_normalized"),
+    block_on("substr(company_name_normalized, 1, 4)", "city"),
+    block_on("substr(company_name_normalized, 1, 4)", "substr(address_1, 1, 5)"),
+    block_on("substr(company_name_normalized, 1, 6)"),
+]
+
+comparisons = [
+    # 1. Entity ID (UEI)
+    # An exact match is extremely strong evidence. We use term frequency adjustments
+    # just in case there are "placeholder" UEIs used commonly across bad records.
+    cl.ExactMatch("entity_id").configure(term_frequency_adjustments=True),
+    cl.JaroWinklerAtThresholds("company_name_normalized").configure(term_frequency_adjustments=True),
+    cl.JaroWinklerAtThresholds("address_1").configure(term_frequency_adjustments=True),
+    cl.JaroWinklerAtThresholds("city"),
+]
+
 SETTINGS = SettingsCreator(
     # 'link_and_dedupe' handles links between sources AND duplicates within them
     link_type="link_and_dedupe",
     unique_id_column_name="unique_id",
-    source_dataset_column_name="source_dataset",
-    blocking_rules_to_generate_predictions=[
-        "l.entity_id = r.entity_id AND l.entity_id IS NOT NULL",  # Force ID matches
-        "soundex(l.company_name_normalized) = soundex(r.company_name_normalized)",
-        "l.city = r.city AND l.city IS NOT NULL",
-    ],
-    comparisons=[
-        cl.ExactMatch("entity_id").configure(term_frequency_adjustments=True),
-        cl.JaroWinklerAtThresholds("city", [0.9, 0.8]),
-        cl.LevenshteinAtThresholds("address_1", [1, 3]),
-        cl.JaroWinklerAtThresholds("company_name_normalized", [0.9, 0.8, 0.7]),
-    ],
+    source_dataset_column_name="data_source",
+    blocking_rules_to_generate_predictions=blocking_rules_to_generate_predictions,
+    comparisons=comparisons,
     retain_intermediate_calculation_columns=True,
+    retain_matching_columns=True,
 )
 
 
@@ -38,7 +51,12 @@ class EntityResolutionJob:
         self.s3_client = S3Client()
 
     def process_data(self, table_names: list[str]) -> str:
-        client = SplinkClient(table_names=table_names, settings=SETTINGS)
+        client = SplinkClient(
+            table_names=table_names,
+            settings=SETTINGS,
+            clustering_threshold=SPLINK_CLUSTERING_THRESHOLD,
+            inference_threshold=SPLINK_INFERENCE_PREDICT_THRESHOLD,
+        )
         links_s3_path = client.run()
         logger.info(f"Finished job and wrote links to {links_s3_path}")
         return links_s3_path

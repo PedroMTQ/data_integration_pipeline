@@ -5,7 +5,7 @@ from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunM
 from data_integration_pipeline.io.file_reader import S3FileReader
 from pathlib import Path
 import os
-from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DELTA_TABLE_SUFFIX, HASH_DIFF_COLUMN, COMPOSITE_ID_STR, DATA_SOURCE_STR
+from data_integration_pipeline.settings import SILVER_DATA_FOLDER, DELTA_TABLE_SUFFIX, HASH_DIFF_COLUMN, COMPOSITE_ID_STR, DATA_SOURCE_STR, COMPOSITE_KEY_SEP
 import pyarrow as pa
 from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 import pyarrow.compute as pc
@@ -17,7 +17,6 @@ class LinksProcessor:
     Processes links and extracts respective data for each delta table, yielding all the data so that we can generate integrated records
     """
 
-    COMPOSITE_KEY_SEP = "-__-"
 
     def __init__(self, metadata: SplinkRunMetadata, bucket_name: str, db_path: str):
         self.metadata = metadata
@@ -38,7 +37,7 @@ class LinksProcessor:
                 composite_id = pc.binary_join_element_wise(
                     pc.cast(table.column("primary_key_type"), pa.string()),
                     pc.cast(table.column("primary_key_id"), pa.string()),
-                    pa.scalar(LinksProcessor.COMPOSITE_KEY_SEP),
+                    pa.scalar(COMPOSITE_KEY_SEP),
                 )
                 return table.append_column(COMPOSITE_ID_STR, composite_id)
 
@@ -69,7 +68,7 @@ class LinksProcessor:
                 composite_id_col = pc.binary_join_element_wise(
                     pa.scalar(primary_key_type),
                     pc.cast(arrow_table.column(primary_key_type), pa.string()),
-                    pa.scalar(LinksProcessor.COMPOSITE_KEY_SEP),
+                    pa.scalar(COMPOSITE_KEY_SEP),
                 )
                 data_source_col = pa.array([table_name] * len(arrow_table), type=pa.string())
                 standardized_table = arrow_table.append_column(COMPOSITE_ID_STR, composite_id_col)

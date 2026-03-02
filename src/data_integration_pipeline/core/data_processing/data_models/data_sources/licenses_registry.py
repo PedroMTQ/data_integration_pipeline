@@ -27,9 +27,6 @@ from data_integration_pipeline.core.data_processing.data_models.templates.base_s
 from data_integration_pipeline.core.data_processing.features_extraction.identifiers import normalize_id
 
 
-NAICS_MAPPING = NaicsMapping()
-
-
 class SchemaRecord(BaseSchema):
     license_id: str
     company_name: str = Field(validation_alias=AliasPath("company_name", "company_name"))
@@ -92,7 +89,7 @@ class Record(BaseRecord):
     @field_validator("naics_code")
     @classmethod
     def validate_naics_code(cls, value: str | None) -> str | None:
-        if not NAICS_MAPPING.get_label(value):
+        if not NaicsMapping().get_label(value):
             logger.debug(f"NAICS code {value} not valid, dropping value...")
             return None
         return value
@@ -101,7 +98,7 @@ class Record(BaseRecord):
     def set_naics_label(self) -> "Record":
         # If is_active wasn't provided in the input, calculate it
         if self.naics_code_label is None and self.naics_code:
-            self.naics_code_label = NAICS_MAPPING.get_label(self.naics_code)
+            self.naics_code_label = NaicsMapping().get_label(self.naics_code)
         return self
 
     @model_serializer(mode="plain")

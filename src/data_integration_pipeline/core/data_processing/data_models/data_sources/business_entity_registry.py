@@ -15,10 +15,14 @@ from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.core.data_processing.data_models.templates.base_model_company_name import (
     BaseModelCompanyName,
 )
+from data_integration_pipeline.core.data_processing.features_extraction.location import AddressStandardizer
 from data_integration_pipeline.core.data_processing.features_extraction.identifiers import normalize_id
 from data_integration_pipeline.core.data_processing.utils import SoftStr
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
+from data_integration_pipeline.core.data_processing.features_extraction.location import (
+    LocationParser,
+)
 
 
 class SchemaRecord(BaseSchema):
@@ -53,6 +57,15 @@ class Record(BaseRecord):
     @classmethod
     def format_id(cls, value: str | None) -> str | None:
         return normalize_id(value)
+
+    @field_validator("address_1")
+    @classmethod
+    def clean_address_1(cls, value: str | None) -> str | None:
+        address_parser = LocationParser()
+        parsed_location = address_parser.parse(value)
+        if parsed_location.address_1:
+            value = AddressStandardizer().replace_abbreviations(parsed_location.address_1)
+        return value
 
     @field_validator("city", "address_1", "postal_code")
     @classmethod
