@@ -9,7 +9,7 @@ from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.core.utils import get_latest_metadata_by_table_group
 
 
-class CreateDeduplicatedRecords:
+class DeduplicateIntegratedRecordsJob:
     """
     Processes links and merges all data to create deduplicated records data
     """
@@ -20,9 +20,8 @@ class CreateDeduplicatedRecords:
 
     def process_data(self, metadata: SplinkRunMetadata) -> str:
         logger.info(f"Processing {metadata.integrated_records_s3_path} to create deduplicated records data")
-        data_model = ModelMapper.get_data_model(metadata.deduplicated_records_s3_path)
-        processor = DuplicatesProcessor(data_model=data_model)
-        processor.process_data(input_path=metadata.integrated_records_s3_path, output_path=metadata.deduplicated_records_s3_path)
+        processor = DuplicatesProcessor()
+        processor.run(input_path=metadata.integrated_records_s3_path, output_path=metadata.deduplicated_records_s3_path, partition_by='anchor_entity.entity_id, anchor_entity.data_source')
 
     def get_data_to_process(self) -> list[dict]:
         metadata_list = []

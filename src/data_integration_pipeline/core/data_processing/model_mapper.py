@@ -12,9 +12,9 @@ from typing import Type
 
 class ModelMapper:
     MAPPINGS = {
-        re.compile(r"business_entity_registry.*", re.IGNORECASE): BusinessEntityRegistryRecord,
-        re.compile(r"licenses.*", re.IGNORECASE): LicensesRegistryRecord,
-        re.compile(r"sub_contractor.*", re.IGNORECASE): SubContractorsRegistryRecord,
+        re.compile(r"business_entity_registry", re.IGNORECASE): BusinessEntityRegistryRecord,
+        re.compile(r"licenses_registry", re.IGNORECASE): LicensesRegistryRecord,
+        re.compile(r"sub_contractors_registry", re.IGNORECASE): SubContractorsRegistryRecord,
         re.compile(r"(gold_business_entity|(deduplicated|integrated)_records).*", re.IGNORECASE): IntegratedRecord,
     }
 
@@ -24,12 +24,8 @@ class ModelMapper:
         Matches a filename against MAPPINGS and returns the corresponding
         Pydantic model class.
         """
-        # Extract just the filename (e.g., 'licenses_2026.csv')
-        file_name = Path(file_path).name
-        print(file_name)
-
         for pattern, model_class in ModelMapper.MAPPINGS.items():
-            if pattern.match(file_name):
+            if pattern.search(file_path):
                 return model_class
         # Log a warning or return None if no match is found
         return None

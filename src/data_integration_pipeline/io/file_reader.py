@@ -162,9 +162,9 @@ if __name__ == "__main__":
     # for row in LocalFileReader(file_path, as_table=False):
     #     print(row)
     #     break
-    s3_path = "entity_resolution/019caee5-3449-7298-b6fe-e6b36f665e7a/integrated_records.parquet"
+    s3_path = "entity_resolution/019cb048-9abb-78d9-8cf2-474711409f2c/deduplicated_records.parquet"
     for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
-        print(table)
+        print(table.schema)
     # s3_path = "entity_resolution/019ca4b0-2e7d-7308-b854-d81e5533bd5b/metadata.json"
     # data = S3FileReader(s3_path, bucket_name=DATA_BUCKET).read_json()
     # print(data)

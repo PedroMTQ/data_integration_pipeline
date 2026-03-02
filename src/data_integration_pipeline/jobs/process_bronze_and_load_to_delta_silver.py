@@ -90,8 +90,8 @@ class ProcessBronzetoSilver:
                 path_suffix = path_obj.relative_to(BRONZE_DATA_FOLDER)
             except Exception:
                 logger.error(f"File path is not valid from bronze processing: {bronze_s3_path}")
-            silver_s3_path = str(Path(SILVER_DATA_FOLDER) / path_suffix.with_suffix(DELTA_TABLE_SUFFIX))
-            errors_s3_path = str(Path(PROCESSING_ERRORS_DATA_FOLDER) / path_suffix.with_suffix(PARQUET_TABLE_SUFFIX))
+            silver_s3_path = str(Path(SILVER_DATA_FOLDER) / path_suffix.with_name(f'records{DELTA_TABLE_SUFFIX}'))
+            errors_s3_path = str(Path(PROCESSING_ERRORS_DATA_FOLDER) / path_suffix.with_name(f'errors{PARQUET_TABLE_SUFFIX}'))
             archive_s3_path = str(Path(ARCHIVE_DATA_FOLDER) / path_suffix)
             if self.s3_client.file_exists(silver_s3_path):
                 logger.debug(f"{bronze_s3_path} already processed, skipping...")
