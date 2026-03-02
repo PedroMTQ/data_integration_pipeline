@@ -44,11 +44,15 @@ class DuplicatesProcessor:
         extension = Path(input_path).suffix.lower()
         with duckdb.connect(self.db_path) as connection:
             connection.execute("INSTALL httpfs; LOAD httpfs;")
+
             if  extension== PARQUET_TABLE_SUFFIX:
                 read_function = 'read_parquet'
             elif extension == DELTA_TABLE_SUFFIX:
                 read_function = 'delta_scan'
                 connection.execute("INSTALL delta; LOAD delta;")
+            schema_sample = connection.execute(f"SELECT * FROM {read_function}('{full_input_path}') LIMIT 0").arrow()
+            cols = schema_sample.schema.names
+            print(cols)
             connection.execute(f"""
                 CREATE OR REPLACE SECRET minio_secret (
                     TYPE S3,
