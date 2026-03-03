@@ -27,6 +27,32 @@ class SplinkRunMetadata:
     model_metadata: dict
     overlap_report: dict = None
 
+    def __str__(self) -> str:
+        def format_section(title, data):
+            lines = [f"\n{title}:"]
+            for k, v in data.items():
+                if isinstance(v, dict):
+                    lines.append(f"  • {k.replace('_', ' ').title()}:")
+                    for sub_k, sub_v in v.items():
+                        lines.append(f"    - {sub_k}: {sub_v}")
+                elif isinstance(v, list):
+                    lines.append(f"  • {k.replace('_', ' ').title()}: {', '.join(map(str, v))}")
+                else:
+                    lines.append(f"  • {k.replace('_', ' ').title()}: {v}")
+            return "\n".join(lines)
+
+        return (
+            f"\n{'─' * 60}"
+            f"\n🚀 Run ID: {self.run_id}\n"
+            f"📅 Time:    {self.timestamp}\n"
+            f"📍 S3 Path: {self.links_s3_path}\n"
+            f"{format_section('📥 Inputs', self.inputs)}\n"
+            f"{format_section('📤 Outputs', self.outputs)}\n"
+            f"{format_section('📤 Overlap Report', self.overlap_report)}\n"
+            f"{format_section('⚙️  Model Details', self.model_metadata)}\n"
+            f"{'─' * 60}\n"
+        )
+
     @classmethod
     def from_splink(
         cls,
@@ -81,4 +107,4 @@ class SplinkRunMetadata:
 
     @property
     def deduplicated_records_s3_path(self) -> float:
-        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"deduplicated_records{PARQUET_TABLE_SUFFIX}")
+        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"dedup_integrated_records{PARQUET_TABLE_SUFFIX}")

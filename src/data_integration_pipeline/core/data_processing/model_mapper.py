@@ -3,10 +3,10 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources imp
     BusinessEntityRegistryRecord,
     SubContractorsRegistryRecord,
     IntegratedRecord,
+    GoldRecord,
     BaseRecordType,
 )
 import re
-from pathlib import Path
 from typing import Type
 
 
@@ -15,7 +15,8 @@ class ModelMapper:
         re.compile(r"business_entity_registry", re.IGNORECASE): BusinessEntityRegistryRecord,
         re.compile(r"licenses_registry", re.IGNORECASE): LicensesRegistryRecord,
         re.compile(r"sub_contractors_registry", re.IGNORECASE): SubContractorsRegistryRecord,
-        re.compile(r"(gold_business_entity|(deduplicated|integrated)_records).*", re.IGNORECASE): IntegratedRecord,
+        re.compile(r"((deduplicated|integrated)_records).*", re.IGNORECASE): IntegratedRecord,
+        re.compile(r"(gold_records).*", re.IGNORECASE): GoldRecord,
     }
 
     @staticmethod

@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 from typing import Union, Iterator
-
+from collections.abc import Iterable
 import polars as pl
 import pyarrow as pa
 from data_integration_pipeline.io.logger import logger
@@ -55,14 +55,17 @@ class DeltaClient:
             raise e
 
     @staticmethod
-    def __prepare_data(data: pa.Table, primary_key: str, partition_key: str) -> pa.Table:
+    def __prepare_data(data: pa.Table, primary_key: Union[str, Iterable], partition_key: str) -> pa.Table:
         if not primary_key:
             raise Exception("Missing primary_key")
         now = datetime.now(timezone.utc)
         df = pl.from_arrow(data)
         if partition_key:
             df = df.with_columns(pl.col(partition_key).fill_null(UNKNOWN_PARTITION_STR))
-        exclude = {primary_key, HASH_DIFF_COLUMN, LDTS_COLUMN}
+        if isinstance(primary_key, str):
+            exclude = {primary_key, HASH_DIFF_COLUMN, LDTS_COLUMN}
+        elif isinstance(primary_key, Iterable):
+            exclude = {HASH_DIFF_COLUMN, LDTS_COLUMN} | set(primary_key)
         columns_to_hash = [name for name, dtype in df.schema.items() if name not in exclude and not dtype.is_nested()]
 
         df = df.with_columns(
@@ -76,7 +79,7 @@ class DeltaClient:
         data = df.to_arrow()
         return data
 
-    def write_overwrite(self, s3_path: str, data: pa.Table, primary_key: str = None, partition_key: str = None, add_metadata_columns: bool = True):
+    def write_overwrite(self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True):
         """
         Writes the data to the Delta table using 'overwrite' mode.
         This replaces the entire table content but maintains version history.
@@ -95,7 +98,7 @@ class DeltaClient:
         )
         logger.info(f"Overwrote table {s3_path} with {len(data)} integrated records.")
 
-    def write(self, s3_path: str, data: pa.Table, primary_key: str = None, partition_key: str = None, add_metadata_columns: bool = True):
+    def write(self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True):
         """
         Main entry point. Performs an idempotent upsert using hash-diffing.
         """
@@ -114,7 +117,15 @@ class DeltaClient:
             return
         dt = DeltaTable(uri, storage_options=self.storage_options)
         mapping = {col: f"source.{col}" for col in data.schema.names if col != primary_key}
-        base_predicate = f"target.{primary_key} = source.{primary_key}"
+        # TODO we need to allow a list of primary keys
+        if isinstance(primary_key, str):
+            base_predicate = f"target.{primary_key} = source.{primary_key}"
+        elif isinstance(primary_key, Iterable):
+            base_predicate = []
+            for k in primary_key:
+                base_predicate.append(f"target.{k} = source.{k}")
+            base_predicate = ' AND '.join(base_predicate)
+
         if partition_key:
             base_predicate += f" AND target.{partition_key} = source.{partition_key}"
         (
@@ -168,22 +179,19 @@ class DeltaClient:
 
 
 if __name__ == "__main__":
-    from data_integration_pipeline.io.file_writer import LocalFileWriter
-    from data_integration_pipeline.settings import TEMP
-
     client = DeltaClient()
+    # data = client.read(
+    #     table_path="data_mart/gold_business_entity/gold_business_entity.delta",
+    # )
+    # print(pa.Table.from_batches(data).shape)
     data = client.read(
-        table_path="data_mart/gold_business_entity/gold_business_entity.delta",
-    )
-    print(pa.Table.from_batches(data).shape)
-    data = client.read(
-        table_path="data_mart/gold_business_entity/id_bridge.delta",
+        table_path="data_mart/gold_business_entity/gold_records.delta",
     )
     print(pa.Table.from_batches(data).shape)
     # writer = LocalFileWriter(file_path=f"{TEMP}/gold_business_entity/gold_business_entity.parquet")
     # for batch in data:
     #     writer.write_table(batch)
-        # print(batch)
+    # print(batch)
     # data_sources = ["business_entity_registry", "licenses_registry", "sub_contractors_registry"]
     # for data_source in data_sources:
     #     data = client.read(

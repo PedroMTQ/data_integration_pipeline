@@ -25,11 +25,12 @@ from data_integration_pipeline.io.file_reader import S3FileReader
 
 
 class SplinkClient:
-    def __init__(self, table_names: list[str], settings: SettingsCreator, clustering_threshold: float, inference_threshold: float):
+    def __init__(self, table_names: list[str], settings: SettingsCreator, clustering_threshold: float, inference_threshold: float, deterministic_rules: list):
         self.table_names = table_names
         self.settings = settings
         self.clustering_threshold = clustering_threshold
         self.inference_threshold = inference_threshold
+        self.deterministic_rules = deterministic_rules
         self.s3_client = S3Client()
         self.db_path = os.path.join(ER_TEMP, "splink", "er.duckdb")
         if os.path.exists(self.db_path):
@@ -37,8 +38,10 @@ class SplinkClient:
             os.remove(self.db_path)
         self.records_count = {}
         self.data_models_primary_keys = {}
-
+        # TODO the model should actually be archived in Mlflow, but for now, we just store it locally
+        self.model_path = os.path.join(ER_TEMP, "splink", "er_model.json")
         self.run_id = str(uuid6.uuid7())
+        self.s3_folder = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id)
         logger.info(f"Starting splink run: {self.run_id}")
 
     def write_table(self, table_path: str, primary_key: str, table_name: str, schema: pa.Schema) -> str:
@@ -94,27 +97,19 @@ class SplinkClient:
         db_connection.execute("LOAD splink_udfs;")
 
     # TODO this always needs to be more customizable
-    def get_linker(self, db_api, table_names: list[str], model_path: str, weights_html_path: str):
-        if os.path.exists(model_path):
-            logger.info(f"Loading pre-trained model from {model_path}")
-            return Linker(table_names, settings=model_path, db_api=db_api)
+    def get_linker(self, db_api, table_names: list[str]):
+        if os.path.exists(self.model_path):
+            logger.info(f"Loading pre-trained model from {self.model_path}")
+            return Linker(table_names, settings=self.model_path, db_api=db_api)
 
         linker = Linker(table_names, settings=self.settings, db_api=db_api)
 
-        deterministic_rules = [
-            block_on("entity_id"),
-            block_on("company_name_normalized", "city"),
-            block_on("company_name_normalized", "substr(address_1, 1, 5)"),
-        ]
-        linker.training.estimate_probability_two_random_records_match(deterministic_rules, recall=0.7)
-
+        linker.training.estimate_probability_two_random_records_match(self.deterministic_rules, recall=0.7)
         linker.training.estimate_u_using_random_sampling(max_pairs=1e7)
-
         # EM Session 1: Block on exact Name
         # This block has plenty of data across ALL THREE datasets.
         # It will successfully train 'entity_id', 'city', and 'address_1'
         linker.training.estimate_parameters_using_expectation_maximisation(block_on("company_name_normalized"))
-
         # EM Session 2: Block on Entity ID
         # This block spans Business <-> Subs (and within).
         # It trains 'company_name_normalized' by looking at pairs with the same UEI.
@@ -124,9 +119,8 @@ class SplinkClient:
         # This casts a wide net to train variations across all features.
         linker.training.estimate_parameters_using_expectation_maximisation(block_on("substr(company_name_normalized, 1, 4)"))
 
-        linker.misc.save_model_to_json(model_path, overwrite=True)
-        linker.visualisations.match_weights_chart().save(weights_html_path)
-        logger.info(f"Trained model saved to {model_path}")
+        linker.misc.save_model_to_json(self.model_path, overwrite=True)
+        logger.info(f"Trained model saved to {self.model_path}")
         return linker
 
     def yield_clustered_records(self, df_clusters, db_connection) -> Iterable[dict]:
@@ -187,7 +181,7 @@ class SplinkClient:
         ).to_dict()
 
     def write_links(self, links_data: Iterable[dict]) -> str:
-        s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, LINKS_FILE_NAME)
+        s3_path = os.path.join(self.s3_folder, LINKS_FILE_NAME)
         with S3FileWriter(s3_path=s3_path, bucket_name=DATA_BUCKET) as writer:
             for row in links_data:
                 writer.write_row(row)
@@ -195,20 +189,19 @@ class SplinkClient:
         return s3_path
 
     def write_metadata(self, run_metadata: dict) -> str:
-        s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, LINKS_METADATA_FILE_NAME)
+        s3_path = os.path.join(self.s3_folder, LINKS_METADATA_FILE_NAME)
         with S3FileWriter(s3_path=s3_path, bucket_name=DATA_BUCKET) as writer:
             writer.write_json(run_metadata)
         logger.info(f"Wrote metadata to {s3_path}")
         return s3_path
 
     def write_model(self, linker: Linker) -> str:
-        s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, LINKS_MODEL_FILE_NAME)
+        s3_path = os.path.join(self.s3_folder, LINKS_MODEL_FILE_NAME)
         with S3FileWriter(s3_path=s3_path, bucket_name=DATA_BUCKET) as writer:
             writer.write_json(linker._settings_obj.as_dict())
         logger.info(f"Wrote model to {s3_path}")
         return s3_path
 
-    # def generate_links(self)
 
     def run(self):
         # we retrain all the time, but in a prod env, we would stick with a pre-trained EM model
@@ -216,9 +209,7 @@ class SplinkClient:
         db_connection = duckdb.connect(self.db_path)
         self.load_extensions(db_connection=db_connection)
         db_api = DuckDBAPI(connection=db_connection)
-        model_path = os.path.join(ER_TEMP, "splink", "er_model.json")
-        weights_html_path = os.path.join(ER_TEMP, "splink", "model_weights.html")
-        linker = self.get_linker(db_api=db_api, table_names=table_names, model_path=model_path, weights_html_path=weights_html_path)
+        linker = self.get_linker(db_api=db_api, table_names=table_names)
         logger.info("Starting Splink prediction...")
 
         predictions = linker.inference.predict(threshold_match_probability=self.inference_threshold)
@@ -238,8 +229,7 @@ class SplinkClient:
         logger.info(f"Splink run results: {run_metadata}")
         self.write_metadata(run_metadata=run_metadata)
         self.write_model(linker=linker)
-        # TODO uncomment
-        # os.remove(self.db_path)
+        os.remove(self.db_path)
         return links_s3_path
 
 

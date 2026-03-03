@@ -15,7 +15,7 @@ def batch_yielder(initial_yielder: Iterable[Any], batch_size: int) -> Iterable[l
         yield chunk
 
 
-def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"]) -> dict[str, "SplinkRunMetadata"]:
+def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"]) -> SplinkRunMetadata:
     """
     Groups runs by their input table combinations and returns only
     the most recent SplinkRunMetadata object for each group.

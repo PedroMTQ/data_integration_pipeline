@@ -107,14 +107,14 @@ class DuckdbClient:
         full_input_path = f"s3://{DATA_BUCKET}/{input_path}"
         extension = Path(input_path).suffix.lower()
         if extension not in {PARQUET_TABLE_SUFFIX, DELTA_TABLE_SUFFIX}:
-            raise Exception(f'Invalid extension {s3_path}')
+            raise Exception(f"Invalid extension {s3_path}")
 
         with duckdb.connect(self.db_path) as connection:
             connection.execute("INSTALL httpfs; LOAD httpfs;")
-            read_function = 'read_parquet'
+            read_function = "read_parquet"
             if extension == DELTA_TABLE_SUFFIX:
                 connection.execute("INSTALL delta; LOAD delta;")
-                read_parquet = 'delta_scan'
+                read_parquet = "delta_scan"
             connection.execute(f"""
                 CREATE OR REPLACE SECRET minio_secret (
                     TYPE S3,

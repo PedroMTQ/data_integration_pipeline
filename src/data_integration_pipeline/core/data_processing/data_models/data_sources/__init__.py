@@ -7,8 +7,9 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources.lic
 from data_integration_pipeline.core.data_processing.data_models.data_sources.sub_contractors_registry import (
     Record as SubContractorsRegistryRecord,
 )
-from data_integration_pipeline.core.entity_resolution.integrated_record import (
-    Record as IntegratedRecord,
+from data_integration_pipeline.core.entity_resolution.integrated_record import Record as IntegratedRecord
+from data_integration_pipeline.core.data_mart.gold_record import (
+    Record as GoldRecord
 )
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord, BaseRecordType
 

@@ -51,7 +51,6 @@ CLUSTER_ID_STR = "cluster_id"
 DATA_SOURCE_STR = "data_source"
 
 
-
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 POSTGRES_USER = os.getenv("POSTGRES_USER")

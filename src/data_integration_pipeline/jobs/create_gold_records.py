@@ -1,6 +1,6 @@
 from data_integration_pipeline.io.s3_client import S3Client
 from data_integration_pipeline.settings import ENTITY_RESOLUTION_DATA_FOLDER, DATA_BUCKET
-from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
+from data_integration_pipeline.core.data_processing.model_mapper import GoldRecord
 from data_integration_pipeline.io.file_reader import S3FileReader
 from data_integration_pipeline.core.data_mart.gold_records_processor import GoldRecordsProcessor
 from data_integration_pipeline.core.entity_resolution.metadata import SplinkRunMetadata
@@ -17,11 +17,11 @@ class CreateGoldRecords:
     def __init__(self):
         self.s3_client = S3Client()
 
-    def process_data(self, metadata: SplinkRunMetadata) -> str:
-        logger.info(f"Processing {metadata.deduplicated_records_s3_path} to create data mart records")
-        data_model = ModelMapper.get_data_model(metadata.deduplicated_records_s3_path)
-        processor = GoldRecordsProcessor(data_model=data_model)
-        view_name = processor.process_data(s3_path=metadata.deduplicated_records_s3_path)
+    def process_data(self, metadata: dict) -> str:
+        run_metadata = SplinkRunMetadata(**metadata)
+        logger.info(f"Processing {run_metadata.deduplicated_records_s3_path} to create data mart records")
+        processor = GoldRecordsProcessor(data_model=GoldRecord)
+        view_name = processor.process_data(s3_path=run_metadata.deduplicated_records_s3_path)
         return view_name
 
     def get_data_to_process(self) -> list[dict]:
@@ -32,29 +32,22 @@ class CreateGoldRecords:
             # we check if we ran the integrated records generation
             if self.s3_client.file_exists(s3_path=metadata.deduplicated_records_s3_path):
                 metadata_list.append(metadata)
-        target_runs = get_latest_metadata_by_table_group(metadata_list=metadata_list)
-        return target_runs
+        for run_metadata in get_latest_metadata_by_table_group(metadata_list=metadata_list):
+            yield run_metadata.to_dict()
 
     def run(self) -> str:
-        """
-        generic wrapper to run all tasks
-        """
-        list_run_metadata: list[SplinkRunMetadata] = self.get_data_to_process()
-        for run_metadata in list_run_metadata:
-            view_name = self.process_data(run_metadata)
+        for metadata in self.get_data_to_process():
+            self.process_data(metadata)
 
+def process_task(metadata: dict):
+    job = CreateGoldRecords()
+    return job.process_data(metadata)
 
-# def process_task(table_names: list[dict]):
-#     job = EntityResolutionJob()
-#     silver_s3_path = job.process_data(table_names)
-#     return silver_s3_path
-
-
-# def get_tasks() -> list[dict]:
-#     job = EntityResolutionJob()
-#     return job.get_data_to_process()
+def get_tasks() -> list[dict]:
+    job = CreateGoldRecords()
+    return list(job.get_data_to_process())
 
 
 if __name__ == "__main__":
     job = CreateGoldRecords()
-    print(job.run())
+    job.run()

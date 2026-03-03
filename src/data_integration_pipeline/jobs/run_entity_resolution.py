@@ -11,7 +11,7 @@ from splink import block_on
 # TODO this is also just a POC, it doesn't work that well
 
 
-blocking_rules_to_generate_predictions = [
+BLOCKING_RULES = [
     block_on("entity_id"),
     block_on("company_name_normalized"),
     block_on("substr(company_name_normalized, 1, 4)", "city"),
@@ -19,7 +19,7 @@ blocking_rules_to_generate_predictions = [
     block_on("substr(company_name_normalized, 1, 6)"),
 ]
 
-comparisons = [
+COMPARISONS = [
     # 1. Entity ID (UEI)
     # An exact match is extremely strong evidence. We use term frequency adjustments
     # just in case there are "placeholder" UEIs used commonly across bad records.
@@ -28,14 +28,19 @@ comparisons = [
     cl.JaroWinklerAtThresholds("address_1").configure(term_frequency_adjustments=True),
     cl.JaroWinklerAtThresholds("city"),
 ]
+DETERMINISTIC_RULES = [
+            block_on("entity_id"),
+            block_on("company_name_normalized", "city"),
+            block_on("company_name_normalized", "substr(address_1, 1, 5)"),
+        ]
 
 SETTINGS = SettingsCreator(
     # 'link_and_dedupe' handles links between sources AND duplicates within them
     link_type="link_and_dedupe",
     unique_id_column_name="unique_id",
     source_dataset_column_name="data_source",
-    blocking_rules_to_generate_predictions=blocking_rules_to_generate_predictions,
-    comparisons=comparisons,
+    blocking_rules_to_generate_predictions=BLOCKING_RULES,
+    comparisons=COMPARISONS,
     retain_intermediate_calculation_columns=True,
     retain_matching_columns=True,
 )
@@ -56,6 +61,7 @@ class EntityResolutionJob:
             settings=SETTINGS,
             clustering_threshold=SPLINK_CLUSTERING_THRESHOLD,
             inference_threshold=SPLINK_INFERENCE_PREDICT_THRESHOLD,
+            deterministic_rules=DETERMINISTIC_RULES,
         )
         links_s3_path = client.run()
         logger.info(f"Finished job and wrote links to {links_s3_path}")
@@ -63,7 +69,7 @@ class EntityResolutionJob:
 
     def get_data_to_process(self) -> Iterable[dict]:
         res = []
-        for table_path in self.s3_client.get_files(prefix="silver", file_name_pattern="deduplicated\.parquet"):
+        for table_path in self.s3_client.get_files(prefix="silver", file_name_pattern=r"deduplicated\.parquet"):
             res.append(table_path)
         return res
 

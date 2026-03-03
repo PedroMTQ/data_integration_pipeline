@@ -2,13 +2,7 @@ from __future__ import annotations
 from typing import Any, Optional, ClassVar
 from collections import Counter
 
-from pydantic import (
-    Field,
-    model_serializer,
-    model_validator,
-    BaseModel,
-    computed_field
-)
+from pydantic import Field, model_serializer, model_validator, BaseModel, computed_field
 from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.settings import (
     CLUSTER_ID_STR,
@@ -21,20 +15,17 @@ from data_integration_pipeline.core.data_processing.data_models.templates.base_r
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BASE_CONFIG_DICT
 from data_integration_pipeline.core.data_processing.data_models.templates.model_date import ModelDate
+from data_integration_pipeline.core.data_processing.data_models.templates.model_license import ModelLicense
 
 
-# temp constants for processing records in clusters 
+# temp constants for processing records in clusters
 LINK_RECORD_DEPTH_SCORE_STR = "_depth_score"
 LINK_RECORD_CONSENSUS_SCORE_STR = "_consensus_score"
 LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR = "_anchor_agreement_score"
 LINK_RECORD_GLOBAL_SCORE_STR = "_global_score"
 LINK_RECORD_IS_PRIMARY_STR = "_is_primary"
 
-class ModelLicense(BaseModel):
-    model_config = BASE_CONFIG_DICT
-    _data_source: ClassVar[str] = "licenses_registry"
-    license_id: str
-    expiration_date: Optional[ModelDate]
+
 
 
 class ModelEntityID(BaseModel):
@@ -95,7 +86,7 @@ class Record(BaseRecord):
     }
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
     _anchor_data_sources: ClassVar[set[str]] = {"business_entity_registry", "sub_contractors_registry"}
-    _data_source: ClassVar[str] = "gold_business_entity"
+    _data_source: ClassVar[str] = "integrated_entity"
     _primary_key: ClassVar[str] = "entity_id"
     _partition_key: ClassVar[str] = "city"
 
@@ -123,7 +114,7 @@ class Record(BaseRecord):
     @property
     def global_score(self) -> float:
         """
-        Calculates a 0.0-1.0 score based on how many fields were successfully 
+        Calculates a 0.0-1.0 score based on how many fields were successfully
         populated during the merging process.
         """
         score = 0
@@ -133,7 +124,6 @@ class Record(BaseRecord):
             if getattr(self, f) not in (None, ""):
                 score += 1
         return round(score / total, 4)
-
 
     @staticmethod
     def calculate_global_consensus(record: dict, num_records: int, agreement_map: dict) -> float:
@@ -186,12 +176,15 @@ class Record(BaseRecord):
             # Total score
             record[LINK_RECORD_GLOBAL_SCORE_STR] = (record[LINK_RECORD_DEPTH_SCORE_STR] + 2 * record[LINK_RECORD_CONSENSUS_SCORE_STR]) / 3
         # we define an anchor record since these correspond to actual business entities
-        valid_anchor_records = [r for r in list_records if r.get(DATA_SOURCE_STR) in Record._anchor_data_sources and r.get(Record._primary_key)]
+        anchor_records = [r for r in list_records if r.get(DATA_SOURCE_STR) in Record._anchor_data_sources]
         # if there are no anchor records, we assume it's not a valid record
         # ! this obviously depends on business-specific decisions
-        if not valid_anchor_records:
-            raise Exception("Missing anchor, dropping record...")
-        anchor = max(valid_anchor_records, key=lambda x: x[LINK_RECORD_GLOBAL_SCORE_STR])
+        if not anchor_records:
+            raise Exception("Missing anchor (no valid anchor data source), dropping record...")
+        anchor_records = [r for r in anchor_records if r.get(Record._primary_key)]
+        if not anchor_records:
+            raise Exception("Missing anchor (no valid anchor primary key), dropping record...")
+        anchor = max(anchor_records, key=lambda x: x[LINK_RECORD_GLOBAL_SCORE_STR])
         anchor[LINK_RECORD_IS_PRIMARY_STR] = True
         return anchor
 

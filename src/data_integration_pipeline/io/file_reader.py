@@ -28,6 +28,10 @@ class FileReader:
         """
         Determines the file type and yields rows one by one.
         """
+        # This absolutely forbids the stream from restarting at Row 0.
+        if self._generator is not None:
+            return self._generator
+
         extension = Path(self._file_path).suffix.lower()
         if extension == ".csv":
             self._generator = self._read_csv()
@@ -162,9 +166,15 @@ if __name__ == "__main__":
     # for row in LocalFileReader(file_path, as_table=False):
     #     print(row)
     #     break
-    s3_path = "silver/sub_contractors_registry/deduplicated.parquet"
+    # s3_path = "entity_resolution/019cb3fb-4126-7e37-9272-5c1e6371d54b/integrated_records.parquet"
+    # for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
+    #     print(table.shape)
+    s3_path = "entity_resolution/019cb3fb-4126-7e37-9272-5c1e6371d54b/links.parquet"
     for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
-        print(table)
+        print(table.shape)
+        table = table.sort_by("primary_key_id")
+        for row in table.to_pylist():
+            print(row)
     # s3_path = "entity_resolution/019ca4b0-2e7d-7308-b854-d81e5533bd5b/metadata.json"
     # data = S3FileReader(s3_path, bucket_name=DATA_BUCKET).read_json()
     # print(data)
