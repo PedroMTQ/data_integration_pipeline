@@ -76,7 +76,7 @@ class LocationParser(SingletonBase):
         try:
             return self.parser(address)
         except Exception as e:
-            logger.error(f'Error parsing address "{address}" due to {e}')
+            logger.debug(f'Error parsing address "{address}" due to {e}')
             return ParsedLocation()
 
 

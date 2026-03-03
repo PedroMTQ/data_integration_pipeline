@@ -1,14 +1,74 @@
-# Data integration pipeline
+
+# Overview
+
+This project constitutes a proof of concept (POC) for the some of the work I've been doing the past few years, in particular in data integration. It covers data ingestion, processing, entity resolution, and creation of hold records.
+In general, it follows the medallion architecture, where raw (bronze) data is uploaed into S3 (Minio in this case), and downstream jobs are triggered (manually for now, but later via Airflow sensors).
+These tasks include:
+
+1. processing raw data into validate data (silver)
+2. loading processed data into a delta table (for automated data versioning)
+3. deduplicating data
+4. performing entity resolution
+5. creating integrated data profiles
+6. deduplicating integrated data profiles
+7. create business-oriented records (gold)
+
+I used 3 types of **synthetic** data in this project, all of which have the typical errors: duplicated data, data typing issues, null values, etc. To note that all these dataset have some type of intersecting fields, some IDs, but we mostly depend on company names and geolocation as these are the most typical real-world scenario.  
+
+## Context
+
+The organization operates with a centralized Federal Business Registry which serves as the legal source of truth. However, due to administrative latency, the Federal Business Registry often lags behind real-world changes. To compensate, data is ingested from two specialized departmental registries: the Sub-contractor Registry  and the Sector-Specific Licensing Registry .
 
 
-1. Data lands into a raw zone (s3/bronze/) 
-2. Data procesing (with some feature extraction), validation, and canonical modelling (pydantic) (s3/silver/*/records.delta)
-3. Silver data loading into "silver" data vault
-3. Deduplicate silver delta table into (s3/silver/*/deduplicated.parquet)
-4. Data auditing of samples of processed data (great expectations) (s3/silver/audits)
-5. Data deduplication and matching (Splink) where we store entity resolution results (s3/silver/integrated)
-5. Data loading into gold data vault (pyarrow + deltatables) using data vault 2.0 architecture (s3/gold/)
-6. Data aggregation for data marts (s3/gold/marts)
+|Registry                       |Authority Level|Update Frequency|Primary Data Focus                                              |
+|-------------------------------|---------------|----------------|----------------------------------------------------------------|
+|Federal Business Registry |Primary (Legal)|Quarterly       |Legal entity names, tax IDs, registered addresses.              |
+|Sub-contractor Registry   |Secondary      |Weekly          |Operational status, current project sites, insurance validity.  |
+|Licensing Registry        |Tertiary       |On-demand       |Professional certifications, safety ratings, compliance history.|
+
+
+### Data schema
+
+Below you can find a few data points from each dataset.
+
+
+##### Businesss registry
+
+|Entity UEI|Official Business Name      |Address Line 1    |City Name|Zip Code|Registration Status|
+|----------|----------------------------|------------------|---------|--------|-------------------|
+|UEI_5560  |GLOBAL LOGISTICS CORP       |202 CARGO RD      |MIAMI    |33101   |INACTIVE           |
+|UEI_4432  |Northwest Piping & Utilities|456 WATER WAY     |         |98101   |ACT                |
+|UEI_1100  |midwest masonry corp        |789 BRICK RD      |CHICAGO  |60601   |EXP                |
+|UEI_5567  |SUNBELT ROOFING INC         |55 SOLAR BLVD     |PHOENIX  |85001   |                   |
+|UEI_2289  |METRO STEEL FABRICATORS     |88 INDUSTRIAL PKWY|NEWARK   |7101    |ACT                |
+|UEI_6643  |COASTAL CONCRTE PARTNERS    |12 SHORE DR       | MIAMI   |33101   |ACT                |
+
+##### Licenses registry
+
+|LICENSE_NUM                    |COMPANY NAME   |HQ LOCATION|NAICS CODE                                                      |CERT_EXPIRY_DATE|
+|-------------------------------|---------------|-----------|----------------------------------------------------------------|----------------|
+|ST-550                         |GLOBAL LOGISTICS|202 CARGO ROAD, MIAMI|484110                                                          |2026-05-22      |
+|ST-550                         |GLOBAL LOGISTICS|202 CARGO ROAD, MIAMI|484110                                                          |2026-05-22      |
+|ST-442                         |northwest piping & mechanical|456 WATER WAY, Boston|238220                                                          |06/15/25        |
+|ST-992                         |ELITE ELEC SYSTEMS|123 Power Av, MIAMI|238210                                                          |2026-12-31      |
+|ST-551                         |SUNBELT ROOFING Limited|55 SOLAR BLVD, SEATTLE|23816                                                           |2027-01-01      |
+|ST-221                         |METRO STEEL FABRICATORS|88 INDUSTRIAL PARKWAY, New York|238120                                                          |2025-09-30      |
+
+
+
+
+##### Sub-contractors registry
+
+|Vendor ID|Firm Name                   |Vendor UEI        |Certification Type|Trade Specialty|
+|---------|----------------------------|------------------|------------------|---------------|
+|MIA-5560 |Global Logistics Corp.      |UEI_5560          |MBE               |Freight        |
+|SEA-4432 |North West Piping           |UEI_4432          |DBE               |Plumbing, Utilities|
+|CHI-1199 |Mid-West Masonry            |                  |WBE               |Brick, Masonry |
+|PHX-5501 |Sunbelt Roofing             |                  |MBE               |Commercial Roofing|
+|NWK-2289 |Metro Steel Fab             |UEI_2289          |MBE               |Structural Steel|
+|MIA-6603 |Coastal Concrete            |                  |DBE               |Foundations, Paving|
+
+
 
 
 
@@ -32,9 +92,15 @@ make infra_status
 ```
 
 
-# Execution workflow
 
-1. Upload test data to S3 bucket `data` in `bronze` area:
+# Data integration workflow
+
+![workflow](./images/workflow.drawio.png)
+
+
+## 1. Raw/bronze data ingestion
+
+Upload test data to S3 bucket `data` in `bronze` area:
 
 ```
 python src/data_integration_pipeline/jobs/upload_bronze.py
@@ -42,8 +108,14 @@ python src/data_integration_pipeline/jobs/upload_bronze.py
 
 This will upload all the files in `tests/data/` to Minio, e.g., `data/bronze/business_entity_registry/business_entity_registry.csv`
 
+![upload_bronze](./images/upload_bronze.png)
 
-2. Process bronze data S3 bucket `data` and writes to S3 bucket `data` in `silver` folder.
+I'm using MinIO as a local S3 storage, where I will host the data, including the raw csv files and all downstream generated delta tables and parquet files. 
+
+
+## 2. Raw data processing
+
+Process bronze data S3 bucket `data` and write to S3 bucket `data` in `silver` folder:
 
 ```
 python src/data_integration_pipeline/jobs/process_bronze_and_load_to_delta_silver.py
@@ -59,7 +131,25 @@ Note that:
 - bronze/raw data is archive in `data/archive/`
 
 
-3. Run data auditing on the delta tables
+Console output:
+![process_bronze_and_load_to_delta_silver](./images/process_bronze_and_load_to_delta_silver.png)
+
+Minio storage:
+![minio_process_bronze_and_load_to_delta_silver](./images/minio_process_bronze_and_load_to_delta_silver.png)
+
+Delta table:
+![delta_silver_data](./images/delta_silver_data.png)
+
+The goal of using delta tables here is to be able to capture data changes over time, e.g., if one of the fields in the data were to change, you would be able to see the commit version of the data, and also be able to roll back to specific versions/timestamps.
+For example, below I changed one of the values of the raw data and after re-processing it, you can see the data history for this specific table:
+
+![delta_cdc](./images/delta_cdc.png)
+
+
+
+## 3. Delta tables auditing
+
+Run data auditing on the delta tables:
 
 ```
 python src/data_integration_pipeline/jobs/audit_silver.py
@@ -70,41 +160,64 @@ You can check the results by running:
 make audit_docs
 ```
 
-This will launch a local server exposing the HTML documents generated by great expectation, which you can check by going to `http://localhost:8080/`
+This will launch a local server exposing the HTML documents generated by [Great Expectations (GX)](https://greatexpectations.io/), which you can check by going [http://localhost:8080/](here)
+
+Below you can see how reports look in GX. Note that I've set fairly basic auditing, but you can see how easy to use it is, especially when you combine it with multiple data stages (e.g., raw->validated).
+
+![gx_home](./images/gx_home.png)
+
+![gx_audit](./images/gx_audit.png)
 
 
-4. Deduplicate silver data based on each of the data models' primary key.
+## 4. Silver data deduplication
+
+Deduplicate silver data based on each of the data models' primary key:
 
 ```
 python src/data_integration_pipeline/jobs/deduplicate_silver_data.py
 ```
 
-Elimitation of duplicates is based on the 1. whether the record is active (if info is available) and 2.0 the fill count of each flat record. We could also modify the data model to include a `global_score` based on other metrics. See `DuplicatesProcessor._deduplicate_silver` for more information. This step is "*optional*", but **recommended if the primary keys are strong indicators of data redundancy**.
+In this step, the goal is to remove data duplicates, which are detected by detecting records with the same primary key (which depends on the underlying data source and respective data model). The elimitation of duplicates is based on the 1. whether the record is active (if info is available) and 2.0 the fill count of each flat record. We could also modify the data model to include a `global_score` based on other metrics. See `DuplicatesProcessor._deduplicate_silver` for more information. This step is "*optional*", but **recommended if the primary keys are strong indicators of data redundancy**.
 
 Note that this step takes a snapshot of the last state of the delta table and creates a deduplicated data, which is then fed into downstream steps. For example the deduplicated data of `data/silver/business_entity_registry/records.delta` is stored as `data/silver/business_entity_registry/deduplicated.parquet`
 
+You can see for example that the licenses registry had a duplicate record:
 
-5. Run entity resolution via Splink with deduplication and linking on the `deduplicated.parquet` files. This will assign each record to a cluster, which we process in the next step.
+|LICENSE_NUM                    |COMPANY NAME   |HQ LOCATION|NAICS CODE                                                      |CERT_EXPIRY_DATE|
+|-------------------------------|---------------|-----------|----------------------------------------------------------------|----------------|
+|ST-550                         |GLOBAL LOGISTICS|202 CARGO ROAD, MIAMI|484110                                                          |2026-05-22      |
+|ST-550                         |GLOBAL LOGISTICS|202 CARGO ROAD, MIAMI|484110                                                          |2026-05-22      |
+
+Where one of them is removed:
+
+![deduplicate_silver_data](./images/deduplicate_silver_data.png)
+
+
+## 5. Entity resolution - deduplication and linking
+
+Run entity resolution via Splink with deduplication and linking on the `deduplicated.parquet` files. 
 
 ```
 python src/data_integration_pipeline/jobs/run_entity_resolution.py
 ```
 
-This step is at the moment quite rudimentary, since Splink depends on training/pre-trained expectation-maximization models, performing entity resolution with small small datasets is not quite feasible. For example, for the current data, we achived this overlap:
+This will assign each record to a cluster, which we process in the next step.
+
+Note that this step is at the moment quite rudimentary, since Splink depends on training/pre-trained expectation-maximization models, performing entity resolution with small small datasets is not quite feasible. For example, for the current data, we achived this overlap:
 
 ```
-business_entity_registry: 99
-business_entity_registry + licenses_registry: 33
+business_entity_registry: 100
+business_entity_registry + licenses_registry: 32
 business_entity_registry + licenses_registry + sub_contractors_registry: 3
 business_entity_registry + sub_contractors_registry: 6
-licenses_registry: 119
+licenses_registry: 120
 sub_contractors_registry: 127
 ```
+
 This is not significant and not representative of real entity resolution, but since the data is synthetically generated (and very small), results are subpar.
 
 
-Note that entity resolution can be run multiple times, where each run is associated with a different hash key e.g., `data/entity_resolution/019cb3cc-a219-7f16-b8fd-f88d5bebb883`
-**In the next steps, if multiple runs are found, we always take the run with the latest timestamp**
+Note that entity resolution can be run multiple times, where each run is associated with a different hash key e.g., `data/entity_resolution/019cb3cc-a219-7f16-b8fd-f88d5bebb883`. **In the next steps, if multiple runs are found, we always take the run with the latest timestamp**
 
 Note that we store this information per run:
 - `model.json` represents the Splink model
@@ -119,25 +232,48 @@ Besides the aforementioned points, there are 2 things we could improve upon:
 - version and store Splink models in Mlflow
 - expose links lineage and metadata for better entity resolution auditing
 
-6. The next step processes all clusters formed by Splink and creates "integrated" records, where we:
-    1. Evaluate each record according to record depth and record consensus with other records
-    2. Per list of records define an anchor record (highest score record from `business_entity_registry` or `sub_contractors_registry`)
-    3. Define an anchor record (which will represent the integrated record) and alternative entities, i.e., other records within the same cluster.
-    4. Apply survivorship rules to fill out the integrated record data model
+![run_entity_resolution](./images/run_entity_resolution.png)
+
+![minio_run_entity_resolution](./images/minio_run_entity_resolution.png)
+
+
+## 6. Entity resolution result processing
+
+Process Splink links:
 
 ```
 python src/data_integration_pipeline/jobs/create_integrated_records.py
 ```
 
+
+The next step processes all clusters formed by Splink and creates "integrated" records, where we:
+    1. Evaluate each record according to record depth and record consensus with other records
+    2. Per list of records define an anchor record (highest score record from `business_entity_registry` or `sub_contractors_registry`)
+    3. Define an anchor record (which will represent the integrated record) and alternative entities, i.e., other records within the same cluster.
+    4. Apply survivorship rules to fill out the integrated record data model (which at the moment are rather rudimentary but could be easily improved upon)
+
+
 For more information check `src/data_integration_pipeline/core/entity_resolution/integrated_record.py` and in particular the `from_cluster` function
 
-7. After generating the integrated records, we run another deduplication step, where we deduplicate the records based on their primary key and data source. Here we the fields `is_active` and `global_score` to rank duplicate records
+![create_integrated_records](./images/create_integrated_records.png)
+
+![minio_create_integrated_records](./images/minio_create_integrated_records.png)
+
+
+## 7. Integrated records deduplication
+
+After generating the integrated records, we run another deduplication step, where we deduplicate the records based on their primary key and data source. Here we the fields `is_active` and `global_score` (this score is generated in the integrated record pydantic data model) to rank duplicate records
 
 ```
 python src/data_integration_pipeline/jobs/deduplicate_integrated_records.py
 ```
 
-8. The last step is to create the gold records which represent the entities which are consumed by downstream business-oriented analysts.
+![deduplicate_integrated_records](./images/deduplicate_integrated_records.png)
+
+
+## 8. Business-layer/gold records generation
+
+The last step is to create the gold records which represent the entities which are consumed by downstream business-oriented stakeholders.
 
 ```
 python src/data_integration_pipeline/jobs/create_gold_records.py
@@ -147,6 +283,22 @@ This is done by:
 1. Getting all the anchor integrated records and storing them in `anchors.parquet` file
 2. Each alternative entity in the integrated records is then linked to the anchor `id_bridge.file`
 3. We create a table with each anchor and alternative entity as rows. Ideally this step would actually just be a materialization of the link between anchors and the id bridge, but since we are working with a local duckdb instance, we materialize the data instead. Nonetheless, the data architecture for this is there, the rest is just "setup"
+
+Note that the entities here are transient, i.e., if entity resolution is done again, the clusters might change. This is generally not desirable in a production environment when you need to have a permanent record, however that is also why we kept the id_bridge table, so that these transient entities are properly traced back to the source. In any case, implementation specifics ultimately depend on the business and how downstream data is used. In any case, once records are linked, downstream gold records can be generated via multiple methods.
+
+
+Console output:
+
+![create_gold_records](./images/create_gold_records.png)
+
+Gold records delta table:
+
+![create_gold_records](./images/delta_create_gold_records.png)
+
+Minio:
+![minio_data_mart](./images/minio_data_mart.png)
+
+
 
 
 

@@ -43,10 +43,21 @@ class DeltaClient:
     def _get_uri(self, table_name: str) -> str:
         return os.path.join(self.base_path, table_name)
 
+    def get_current_version(self, table_name: str) -> int:
+        uri = self._get_uri(table_name)
+        try:
+            dt = DeltaTable(uri, storage_options=self.storage_options)
+            return dt.version()
+        except Exception as e:
+            print(f"Error reading changes for {table_name} due to {e}")
+            return 0
+
     def get_data_history(self, table_name: str):
         uri = self._get_uri(table_name)
         try:
             dt = DeltaTable(uri, storage_options=self.storage_options)
+            current_version = dt.version()
+            print("current table version", current_version)
             table = dt.load_cdf(starting_version=1, ending_version=dt.version()).read_all()
             pt = pl.from_arrow(table)
             print(pt.sort("_commit_version", descending=True))
@@ -79,7 +90,9 @@ class DeltaClient:
         data = df.to_arrow()
         return data
 
-    def write_overwrite(self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True):
+    def write_overwrite(
+        self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True
+    ):
         """
         Writes the data to the Delta table using 'overwrite' mode.
         This replaces the entire table content but maintains version history.
@@ -98,14 +111,15 @@ class DeltaClient:
         )
         logger.info(f"Overwrote table {s3_path} with {len(data)} integrated records.")
 
-    def write(self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True):
+    def write(
+        self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True
+    ):
         """
         Main entry point. Performs an idempotent upsert using hash-diffing.
         """
         uri = self._get_uri(s3_path)
         if add_metadata_columns:
             data = self.__prepare_data(data=data, primary_key=primary_key, partition_key=partition_key)
-        # 2. Handle Initial Table Creation
         if not DeltaTable.is_deltatable(uri, storage_options=self.storage_options):
             write_deltalake(
                 uri,
@@ -124,7 +138,7 @@ class DeltaClient:
             base_predicate = []
             for k in primary_key:
                 base_predicate.append(f"target.{k} = source.{k}")
-            base_predicate = ' AND '.join(base_predicate)
+            base_predicate = " AND ".join(base_predicate)
 
         if partition_key:
             base_predicate += f" AND target.{partition_key} = source.{partition_key}"
@@ -184,10 +198,19 @@ if __name__ == "__main__":
     #     table_path="data_mart/gold_business_entity/gold_business_entity.delta",
     # )
     # print(pa.Table.from_batches(data).shape)
+    table_path = "silver/business_entity_registry/records.delta"
     data = client.read(
-        table_path="data_mart/gold_business_entity/gold_records.delta",
+        table_path=table_path,
     )
-    print(pa.Table.from_batches(data).shape)
+    print(client.get_current_version(table_path))
+    print(client.get_data_history(table_path))
+
+    # import polars as pl
+    # table = pa.Table.from_batches(data)
+    # print(table.shape)
+    # client.write(table_path, data=table, primary_key='entity_id', partition_key='city')
+    # print(client.get_current_version(table_path))
+    # print(table.shape)
     # writer = LocalFileWriter(file_path=f"{TEMP}/gold_business_entity/gold_business_entity.parquet")
     # for batch in data:
     #     writer.write_table(batch)

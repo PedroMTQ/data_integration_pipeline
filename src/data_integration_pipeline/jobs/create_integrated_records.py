@@ -53,7 +53,7 @@ class CreateIntegratedRecords:
             metadata = S3FileReader(s3_path=s3_path, bucket_name=DATA_BUCKET).read_json()
             metadata_list.append(SplinkRunMetadata(**metadata))
         run_metadata: SplinkRunMetadata
-        for run_metadata in  get_latest_metadata_by_table_group(metadata_list=metadata_list):
+        for run_metadata in get_latest_metadata_by_table_group(metadata_list=metadata_list):
             yield run_metadata.to_dict()
 
     def run(self) -> str:
@@ -70,9 +70,11 @@ def process_task(metadata: dict):
     integrated_records_s3_path = job.process_data(metadata)
     return integrated_records_s3_path
 
+
 def get_tasks() -> list[dict]:
     job = CreateIntegratedRecords()
     return list(job.get_data_to_process())
+
 
 if __name__ == "__main__":
     job = CreateIntegratedRecords()

@@ -29,10 +29,10 @@ COMPARISONS = [
     cl.JaroWinklerAtThresholds("city"),
 ]
 DETERMINISTIC_RULES = [
-            block_on("entity_id"),
-            block_on("company_name_normalized", "city"),
-            block_on("company_name_normalized", "substr(address_1, 1, 5)"),
-        ]
+    block_on("entity_id"),
+    block_on("company_name_normalized", "city"),
+    block_on("company_name_normalized", "substr(address_1, 1, 5)"),
+]
 
 SETTINGS = SettingsCreator(
     # 'link_and_dedupe' handles links between sources AND duplicates within them

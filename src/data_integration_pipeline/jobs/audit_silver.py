@@ -51,7 +51,7 @@ class AuditSilverDataJob:
             target_total_rows=AUDIT_TOTAL_ROWS,
         )
         data_auditor = DataAuditor(data_model=data_model, dataset_stage="silver", additional_rules=self.additional_rules)
-        data_sample: Iterator[pa.RecordBatch] = s3_sampler.get_data()
+        data_sample: pa.RecordBatchReader = s3_sampler.get_data()
         data_auditor.run(data=data_sample)
         data_auditor.export_docs()
 

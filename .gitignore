@@ -58,3 +58,4 @@ data/*
 tmp/*
 
 uv.lock
+config/airflow.cfg

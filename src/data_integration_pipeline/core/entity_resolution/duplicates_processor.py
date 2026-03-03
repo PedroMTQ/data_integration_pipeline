@@ -102,12 +102,10 @@ class DuplicatesProcessor:
 
             logger.info(f"Starting global deduplication from {full_input_path}")
             if data_type == "silver":
-                counts = self._deduplicate_silver(
-                    input_path=full_input_path, output_path=full_output_path, connection=connection
-                )
+                counts = self._deduplicate_silver(input_path=full_input_path, output_path=full_output_path, connection=connection)
             elif data_type == "integrated":
-                counts = self._deduplicate_integrated(
-                    input_path=full_input_path, output_path=full_output_path, connection=connection
-                )
+                counts = self._deduplicate_integrated(input_path=full_input_path, output_path=full_output_path, connection=connection)
 
-        logger.info(f"Consumed {counts['initial_count']} records from {input_path} and wrote {counts['deduplicated_count']} deduplicated records into {output_path}")
+        logger.info(
+            f"Consumed {counts['initial_count']} records from {input_path} and wrote {counts['deduplicated_count']} deduplicated records into {output_path}"
+        )

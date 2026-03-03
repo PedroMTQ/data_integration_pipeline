@@ -60,27 +60,29 @@ class LinksProcessor:
         try:
             first_table = next(generator)
             for function_to_run in functions_to_run:
-                function = function_to_run['function']
-                kwargs = function_to_run.get('kwargs', {})
+                function = function_to_run["function"]
+                kwargs = function_to_run.get("kwargs", {})
                 first_table = function(first_table, **kwargs)
             schema = first_table.schema
+
             def batch_stream():
                 yield from first_table.to_batches()
                 for table in generator:
                     for function_to_run in functions_to_run:
-                        function = function_to_run['function']
-                        kwargs = function_to_run.get('kwargs', {})
+                        function = function_to_run["function"]
+                        kwargs = function_to_run.get("kwargs", {})
                         table = function(table, **kwargs)
                     yield from table.to_batches()
+
             return pa.RecordBatchReader.from_batches(schema, batch_stream())
         except StopIteration:
             return None
 
     def get_links(self, db_connection):
         # note that the links table has is a flat table where each row represents a link, and not a cluster, i.e., if you have a cluster with 2 links, then you will have 2 rows in this table pointing to the same cluster
-        logger.info(f'Reading links from {self.metadata.links_s3_path}')
+        logger.info(f"Reading links from {self.metadata.links_s3_path}")
         reader = S3FileReader(s3_path=self.metadata.links_s3_path, bucket_name=self.bucket_name, as_table=True)
-        links_reader = self._wrap_as_record_batch_reader(reader, functions_to_run=[{'function': self._prepare_links}])
+        links_reader = self._wrap_as_record_batch_reader(reader, functions_to_run=[{"function": self._prepare_links}])
         db_connection.register("links_stream", links_reader)
         if links_reader is None:
             raise Exception("Links data is missing...")
@@ -91,16 +93,18 @@ class LinksProcessor:
         for table_name in self.metadata.inputs["table_names"]:
             data_table_name = f"data_{table_name}"
             table_path = os.path.join(SILVER_DATA_FOLDER, table_name, f"deduplicated{PARQUET_TABLE_SUFFIX}")
-            logger.info(f'Reading data from {table_path}')
+            logger.info(f"Reading data from {table_path}")
             data_model = ModelMapper.get_data_model(table_path)
             primary_key_type = data_model._primary_key
             reader = S3FileReader(s3_path=table_path, bucket_name=self.bucket_name, as_table=True)
-            data_reader = self._wrap_as_record_batch_reader(reader, functions_to_run=[{'function': self._prepare_data, 'kwargs': {'primary_key_type': primary_key_type, 'table_name': table_name}}])
+            data_reader = self._wrap_as_record_batch_reader(
+                reader,
+                functions_to_run=[{"function": self._prepare_data, "kwargs": {"primary_key_type": primary_key_type, "table_name": table_name}}],
+            )
             db_connection.register(data_table_name, data_reader)
             source_queries.append(f"SELECT * FROM {data_table_name}")
         union_sql = " UNION ALL BY NAME ".join(source_queries)
         return union_sql
-
 
     def get_links_with_data(self):
         """
@@ -109,7 +113,7 @@ class LinksProcessor:
         with duckdb.connect(self.db_path) as connection:
             union_sql = self.get_data(db_connection=connection)
             self.get_links(db_connection=connection)
-            connection.execute(f"DROP VIEW IF EXISTS all_sources")
+            connection.execute("DROP VIEW IF EXISTS all_sources")
             connection.execute(f"CREATE VIEW all_sources AS {union_sql}")
             # we generally would not get orphans, unless splink for some reason doesn't output unmatched data, we keep with coalesce for safety
             query = f"""

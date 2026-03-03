@@ -14,7 +14,6 @@ from data_integration_pipeline.settings import (
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord
 from data_integration_pipeline.core.data_processing.data_models.templates.base_schema import BaseSchema
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BASE_CONFIG_DICT
-from data_integration_pipeline.core.data_processing.data_models.templates.model_date import ModelDate
 from data_integration_pipeline.core.data_processing.data_models.templates.model_license import ModelLicense
 
 
@@ -24,8 +23,6 @@ LINK_RECORD_CONSENSUS_SCORE_STR = "_consensus_score"
 LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR = "_anchor_agreement_score"
 LINK_RECORD_GLOBAL_SCORE_STR = "_global_score"
 LINK_RECORD_IS_PRIMARY_STR = "_is_primary"
-
-
 
 
 class ModelEntityID(BaseModel):

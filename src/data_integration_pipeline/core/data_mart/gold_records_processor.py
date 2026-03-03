@@ -22,9 +22,7 @@ import polars as pl
 from data_integration_pipeline.io.logger import logger
 from data_integration_pipeline.io.file_reader import S3FileReader
 from pathlib import Path
-from data_integration_pipeline.core.data_mart.gold_record import Record
 
-from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 
 class GoldRecordsProcessor:
     def __init__(self, data_model: Type[BaseRecordType]):
@@ -67,15 +65,13 @@ class GoldRecordsProcessor:
         anchors = df.select(
             pl.col("anchor_entity").struct.field("entity_id").alias("anchor_entity_id"),
             pl.col("anchor_entity").struct.field("data_source").alias("anchor_data_source"),
-            pl.lit('').alias("alt_entity_id"),
-            pl.lit('').alias("alt_data_source"),
+            pl.lit("").alias("alt_entity_id"),
+            pl.lit("").alias("alt_data_source"),
             pl.lit(True).alias("is_anchor"),
         )
         logger.debug(f"{'-' * 20}{'Anchor entities'}{'-' * 20}\n{anchors}")
 
-
-        alt_struct_type = pl.Struct([pl.Field("entity_id", pl.String),
-                                     pl.Field("data_source", pl.String)])
+        alt_struct_type = pl.Struct([pl.Field("entity_id", pl.String), pl.Field("data_source", pl.String)])
         alts = (
             df.select(
                 pl.col("anchor_entity").struct.field("entity_id").alias("anchor_entity_id"),
@@ -86,8 +82,8 @@ class GoldRecordsProcessor:
             .explode("alt_entities")
             .select(
                 [
-                    pl.col('anchor_entity_id'),
-                    pl.col('anchor_data_source'),
+                    pl.col("anchor_entity_id"),
+                    pl.col("anchor_data_source"),
                     pl.col("alt_entities").struct.field("entity_id").alias("alt_entity_id"),
                     pl.col("alt_entities").struct.field("data_source").alias("alt_data_source"),
                     pl.lit(False).alias("is_anchor"),
@@ -95,7 +91,7 @@ class GoldRecordsProcessor:
             )
         )
         logger.debug(rf"{'-' * 20}{'Non-anchor entities and their respective anchors'}{'-' * 20}\{alts}")
-    
+
         bridge = (
             pl.concat([anchors, alts])
             # these are not really necessary
@@ -108,7 +104,6 @@ class GoldRecordsProcessor:
         logger.debug(f"{'-' * 20}{'Bridge table'}{'-' * 20}\n{bridge}")
 
         return bridge.to_arrow()
-
 
     def create_gold_table(self) -> str:
         """
@@ -178,9 +173,6 @@ class GoldRecordsProcessor:
                         partition_key=self.data_model._partition_key,
                     )
 
-
-
-
     def process_data(self, s3_path: str):
         count_anchor = 0
         count_bridge = 0
@@ -210,4 +202,3 @@ class GoldRecordsProcessor:
         gold_data_table = self.create_gold_table()
         self.write_gold_delta(gold_data_table)
         # os.remove(self.db_path)
-        

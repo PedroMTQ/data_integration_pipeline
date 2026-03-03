@@ -7,17 +7,21 @@ readme = "README.md"
 maintainers = [{ name = "Pedro Queiros", email = "coding.paradox013@passmail.net" }]
 dependencies = [
     "ruff",
-    "pydantic[email]",
+    # data models annd validation
+    "pydantic",
     "retry",
+    # data parsing
     "dateparser",
     "validators",
+    # fuzzy matching
     "rapidfuzz",
     # processess company names
     "cleanco",
     # proceses addresses
     "usaddress-scourgify",
-
+    # data auditing
     "great_expectations",
+    # processing engines and storage
     "pyarrow",
     "duckdb",
     "duckdb-engine",
@@ -26,6 +30,7 @@ dependencies = [
     "boto3",
     "s3fs",
     "uuid6",
+    # entity resolution
     "splink",
 ]
 

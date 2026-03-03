@@ -39,9 +39,11 @@ class CreateGoldRecords:
         for metadata in self.get_data_to_process():
             self.process_data(metadata)
 
+
 def process_task(metadata: dict):
     job = CreateGoldRecords()
     return job.process_data(metadata)
+
 
 def get_tasks() -> list[dict]:
     job = CreateGoldRecords()

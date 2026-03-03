@@ -9,7 +9,6 @@ from data_integration_pipeline.settings import SILVER_DATA_FOLDER, PARQUET_TABLE
 
 
 class DeduplicateSilverDataJob:
-
     def process_data(self, silver_s3_path: str, deduplicated_s3_path: str) -> str:
         logger.info(f"Processing {silver_s3_path} to create deduplicated records data")
         data_model = ModelMapper().get_data_model(silver_s3_path)
@@ -33,6 +32,7 @@ class DeduplicateSilverDataJob:
         """
         for task in self.get_data_to_process():
             self.process_data(**task)
+
 
 def process_task(task_dict: dict):
     job = DeduplicateSilverDataJob()

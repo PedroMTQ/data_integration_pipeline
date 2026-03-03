@@ -25,7 +25,9 @@ from data_integration_pipeline.io.file_reader import S3FileReader
 
 
 class SplinkClient:
-    def __init__(self, table_names: list[str], settings: SettingsCreator, clustering_threshold: float, inference_threshold: float, deterministic_rules: list):
+    def __init__(
+        self, table_names: list[str], settings: SettingsCreator, clustering_threshold: float, inference_threshold: float, deterministic_rules: list
+    ):
         self.table_names = table_names
         self.settings = settings
         self.clustering_threshold = clustering_threshold
@@ -202,7 +204,6 @@ class SplinkClient:
         logger.info(f"Wrote model to {s3_path}")
         return s3_path
 
-
     def run(self):
         # we retrain all the time, but in a prod env, we would stick with a pre-trained EM model
         table_names = self.write_tables()
@@ -230,6 +231,7 @@ class SplinkClient:
         self.write_metadata(run_metadata=run_metadata)
         self.write_model(linker=linker)
         os.remove(self.db_path)
+        os.remove(self.model_path)
         return links_s3_path
 
 
