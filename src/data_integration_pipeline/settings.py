@@ -49,11 +49,7 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "10"))
 COMPOSITE_ID_STR = "composite_id"
 CLUSTER_ID_STR = "cluster_id"
 DATA_SOURCE_STR = "data_source"
-LINK_RECORD_DEPTH_SCORE_STR = "_depth_score"
-LINK_RECORD_CONSENSUS_SCORE_STR = "_consensus_score"
-LINK_RECORD_ANCHOR_AGREEMENT_SCORE_STR = "_anchor_agreement_score"
-LINK_RECORD_GLOBAL_SCORE_STR = "_global_score"
-LINK_RECORD_IS_PRIMARY_STR = "_is_primary"
+
 
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")

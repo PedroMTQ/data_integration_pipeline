@@ -20,8 +20,8 @@ class DeduplicateIntegratedRecordsJob:
 
     def process_data(self, metadata: SplinkRunMetadata) -> str:
         logger.info(f"Processing {metadata.integrated_records_s3_path} to create deduplicated records data")
-        processor = DuplicatesProcessor()
-        processor.run(input_path=metadata.integrated_records_s3_path, output_path=metadata.deduplicated_records_s3_path, partition_by='anchor_entity.entity_id, anchor_entity.data_source')
+        processor = DuplicatesProcessor(partition_by_keys=['anchor_entity.entity_id', 'anchor_entity.data_source'])
+        processor.run(input_path=metadata.integrated_records_s3_path, output_path=metadata.deduplicated_records_s3_path)
 
     def get_data_to_process(self) -> list[dict]:
         metadata_list = []

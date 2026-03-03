@@ -61,10 +61,9 @@ class EntityResolutionJob:
         logger.info(f"Finished job and wrote links to {links_s3_path}")
         return links_s3_path
 
-    # TODO you wouldn't do this in prod, you can't just blindly link all data, this POC, we go ahead with it
     def get_data_to_process(self) -> Iterable[dict]:
         res = []
-        for table_path in self.s3_client.get_delta_tables(prefix="silver"):
+        for table_path in self.s3_client.get_files(prefix="silver", file_name_pattern="deduplicated\.parquet"):
             res.append(table_path)
         return res
 

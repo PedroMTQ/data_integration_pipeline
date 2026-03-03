@@ -1,5 +1,4 @@
 from typing import Iterable
-from data_integration_pipeline.io.delta_client import DeltaClient
 from data_integration_pipeline.io.s3_client import S3Client
 from data_integration_pipeline.io.file_writer import S3FileWriter
 from data_integration_pipeline.io.duckdb_client import DuckdbClient
@@ -22,6 +21,7 @@ from splink import Linker, DuckDBAPI, SettingsCreator
 import uuid6
 from collections import defaultdict
 from splink import block_on
+from data_integration_pipeline.io.file_reader import S3FileReader
 
 
 class SplinkClient:
@@ -31,7 +31,6 @@ class SplinkClient:
         self.clustering_threshold = clustering_threshold
         self.inference_threshold = inference_threshold
         self.s3_client = S3Client()
-        self.delta_client = DeltaClient()
         self.db_path = os.path.join(ER_TEMP, "splink", "er.duckdb")
         if os.path.exists(self.db_path):
             logger.info("Dropping old DB...")
@@ -45,11 +44,11 @@ class SplinkClient:
     def write_table(self, table_path: str, primary_key: str, table_name: str, schema: pa.Schema) -> str:
         logger.info(f"Reading {table_path}")
         duckdb_client = DuckdbClient(db_path=self.db_path, table_name=table_name)
-        data = self.delta_client.read(table_path=table_path)
-        data = self.set_to_master_schema(data=data, primary_key=primary_key, table_name=table_name, schema=schema)
-        total_rows = duckdb_client.save_to_disk(data)
-        self.records_count[table_name] = total_rows
-        logger.info(f"Wrote {table_path} to {self.db_path}/{table_name}")
+        with S3FileReader(s3_path=table_path, bucket_name=DATA_BUCKET, as_table=True) as reader:
+            data = self.set_to_master_schema(data=reader, primary_key=primary_key, table_name=table_name, schema=schema)
+            total_rows = duckdb_client.save_to_disk(data)
+            self.records_count[table_name] = total_rows
+            logger.info(f"Wrote {table_path} to {self.db_path}/{table_name}")
 
     @staticmethod
     def set_to_master_schema(data: Iterable[pa.Table], primary_key: str, table_name: str, schema: pa.Schema):
@@ -76,16 +75,17 @@ class SplinkClient:
     def write_tables(self) -> list[str]:
         res = []
         schemas = []
-        for table_path in self.s3_client.get_delta_tables(prefix="silver"):
+        for table_path in self.table_names:
             data_model = ModelMapper.get_data_model(table_path)
             schemas.append(data_model._pa_schema)
         master_schema = self.get_master_schema(schemas)
-        for table_path in self.s3_client.get_delta_tables(prefix="silver"):
+
+        for table_path in self.table_names:
             data_model = ModelMapper.get_data_model(table_path)
-            table_name = data_model._data_source
-            self.data_models_primary_keys[table_name] = data_model._primary_key
-            self.write_table(table_path=table_path, table_name=table_name, primary_key=data_model._primary_key, schema=master_schema)
-            res.append(table_name)
+            data_source = data_model._data_source
+            self.data_models_primary_keys[data_source] = data_model._primary_key
+            self.write_table(table_path=table_path, table_name=data_source, primary_key=data_model._primary_key, schema=master_schema)
+            res.append(data_source)
         return res
 
     @staticmethod
@@ -238,6 +238,8 @@ class SplinkClient:
         logger.info(f"Splink run results: {run_metadata}")
         self.write_metadata(run_metadata=run_metadata)
         self.write_model(linker=linker)
+        # TODO uncomment
+        # os.remove(self.db_path)
         return links_s3_path
 
 

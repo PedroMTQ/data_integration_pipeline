@@ -24,8 +24,8 @@ class DeduplicateSilverDataJob:
     def process_data(self, silver_s3_path: str, deduplicated_s3_path: str) -> str:
         logger.info(f"Processing {silver_s3_path} to create deduplicated records data")
         data_model = ModelMapper().get_data_model(silver_s3_path)
-        processor = DuplicatesProcessor()
-        processor.run(input_path=silver_s3_path, output_path=deduplicated_s3_path, partition_by=data_model._primary_key)
+        processor = DuplicatesProcessor(partition_by_keys=[data_model._primary_key])
+        processor.run(input_path=silver_s3_path, output_path=deduplicated_s3_path, data_type='silver')
 
     def get_data_to_process(self) -> Iterable[dict]:
         res = []

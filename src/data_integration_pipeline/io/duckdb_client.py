@@ -5,6 +5,7 @@ from typing import Iterable, Optional
 import duckdb
 import pyarrow as pa
 from data_integration_pipeline.io.logger import logger
+from data_integration_pipeline.settings import PARQUET_TABLE_SUFFIX, DELTA_TABLE_SUFFIX, S3_ACCESS_KEY, S3_ENDPOINT_URL, S3_SECRET_ACCESS_KEY
 
 
 class DuckdbClient:
@@ -99,6 +100,39 @@ class DuckdbClient:
             for batch in reader:
                 # Convert RecordBatch to Table for consistency with your previous code
                 yield pa.Table.from_batches([batch])
+
+    def copy_s3_to_db(self, s3_path: str):
+
+        endpoint = S3_ENDPOINT_URL.replace("http://", "").replace("https://", "")
+        full_input_path = f"s3://{DATA_BUCKET}/{input_path}"
+        extension = Path(input_path).suffix.lower()
+        if extension not in {PARQUET_TABLE_SUFFIX, DELTA_TABLE_SUFFIX}:
+            raise Exception(f'Invalid extension {s3_path}')
+
+        with duckdb.connect(self.db_path) as connection:
+            connection.execute("INSTALL httpfs; LOAD httpfs;")
+            read_function = 'read_parquet'
+            if extension == DELTA_TABLE_SUFFIX:
+                connection.execute("INSTALL delta; LOAD delta;")
+                read_parquet = 'delta_scan'
+            connection.execute(f"""
+                CREATE OR REPLACE SECRET minio_secret (
+                    TYPE S3,
+                    PROVIDER config,
+                    KEY_ID '{S3_ACCESS_KEY}',
+                    SECRET '{S3_SECRET_ACCESS_KEY}',
+                    REGION 'us-east-1',
+                    ENDPOINT '{endpoint}',
+                    URL_STYLE 'path',
+                    USE_SSL 'false'
+                );
+            """)
+            connection.execute(f"""
+                CREATE OR REPLACE TABLE {self.table_name} AS 
+                SELECT * FROM {read_function}('{full_input_path}')
+            """)
+            count = connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            logger.info(f"Import finished. {table_name} contains {count} records.")
 
 
 if __name__ == "__main__":
