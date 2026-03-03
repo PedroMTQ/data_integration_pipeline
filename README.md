@@ -1,11 +1,11 @@
 
 # Overview
 
-This project constitutes a proof of concept (POC) for the some of the work I've been doing the past few years, in particular in data integration. It covers data ingestion, processing, entity resolution, and creation of hold records.
+This project constitutes a proof of concept (POC) for the some of the work I've been doing the past few years, in particular in data integration. It covers data ingestion, processing, entity resolution, and creation of gsold records.
 In general, it follows the medallion architecture, where raw (bronze) data is uploaed into S3 (Minio in this case), and downstream jobs are triggered (manually for now, but later via Airflow sensors).
 These tasks include:
 
-1. processing raw data into validate data (silver)
+1. processing and archiving raw data (bronze) into validated data (silver)
 2. loading processed data into a delta table (for automated data versioning)
 3. deduplicating data
 4. performing entity resolution
@@ -13,7 +13,7 @@ These tasks include:
 6. deduplicating integrated data profiles
 7. create business-oriented records (gold)
 
-I used 3 types of **synthetic** data in this project, all of which have the typical errors: duplicated data, data typing issues, null values, etc. To note that all these dataset have some type of intersecting fields, some IDs, but we mostly depend on company names and geolocation as these are the most typical real-world scenario.  
+I used 3 types of **synthetic** data in this project, all of which have the typical errors: duplicated data, data typing issues, null values, etc. To note that all these dataset have some type of intersecting fields, some IDs, but we mostly depend on company names and geolocation as these are a very typical real-world scenario.  
 
 ## Context
 
@@ -303,6 +303,7 @@ Minio:
 
 
 # TODO
+- add unit testing
 - add airflow sensors and respective orchestration. I've already started (see `dags`), but will need a few more days to wrap that up
 - Improve entity resolution : add better auditing for splink matches, model logging (Mlflow) and better Splink settings. This is the weakest point of this POC, but also natural due to the nature of the input data.
 - The IO objects don't have a well standardized protocol, so it ought to be improved. I'm using delta-scan in duckdb but then also have clients for each. This needs to be better standardized
