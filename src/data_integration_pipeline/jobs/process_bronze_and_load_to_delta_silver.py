@@ -41,11 +41,13 @@ class ProcessBronzetoSilver:
         )
 
     def process_data(self, bronze_s3_path: str, archive_s3_path: str, silver_s3_path: str, errors_s3_path: str):
-        logger.info(f"Reading raw data from {bronze_s3_path} and writing processed data to {silver_s3_path}")
+        logger.info(f'Reading raw data from {bronze_s3_path} and writing processed data to {silver_s3_path}')
         reader = S3FileReader(s3_path=bronze_s3_path, bucket_name=DATA_BUCKET)
         writer = DeltaClient()
-        fail_writer = S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET)
+        fail_writer = S3FileWriter(s3_path=errors_s3_path)
         data_model = ModelMapper.get_data_model(bronze_s3_path)
+        if not data_model:
+            raise ValueError(f'No data model mapping found for input path: {bronze_s3_path}')
         # you'd want to expose these metrics to a dashboard e.g., using prometheus+grafana or send events somewhere
         metrics = Metrics()
         batch_buffer = []
@@ -56,29 +58,19 @@ class ProcessBronzetoSilver:
                     batch_buffer.append(processed_data.model_dump())
                     metrics.log_result(is_success=True)
                 except Exception as e:
-                    logger.warning(f"Validation error: {e}")
+                    logger.warning(f'Validation error: {e}')
                     fail_stream_out.write_row(row)
                     metrics.log_result(is_success=False)
                 # Check if we should flush the buffer
                 if len(batch_buffer) >= DELTA_CLIENT_BATCH_SIZE:
-                    self._flush_buffer(
-                        writer=writer,
-                        batch_buffer=batch_buffer,
-                        data_model=data_model,
-                        s3_path=silver_s3_path,
-                    )
+                    self._flush_buffer(writer=writer, data=batch_buffer, data_model=data_model, s3_path=silver_s3_path)
                     batch_buffer = []  # Reset buffer
             # Final flush for any remaining records in the buffer
             if batch_buffer:
-                self._flush_buffer(
-                    writer=writer,
-                    data=batch_buffer,
-                    data_model=data_model,
-                    s3_path=silver_s3_path,
-                )
-        logger.info(f"Processed {bronze_s3_path} and wrote output to {silver_s3_path}. File metrics: {metrics}")
+                self._flush_buffer(writer=writer, data=batch_buffer, data_model=data_model, s3_path=silver_s3_path)
+        logger.info(f'Processed {bronze_s3_path} and wrote output to {silver_s3_path}. File metrics: {metrics}')
         if metrics.failures:
-            logger.warning(f"Wrote {metrics.failures} invalid rows to {errors_s3_path}")
+            logger.warning(f'Wrote {metrics.failures} invalid rows to {errors_s3_path}')
         self.s3_client.move_file(current_path=bronze_s3_path, new_path=archive_s3_path)
         return silver_s3_path
 
@@ -89,26 +81,31 @@ class ProcessBronzetoSilver:
             try:
                 path_suffix = path_obj.relative_to(BRONZE_DATA_FOLDER)
             except Exception:
-                logger.error(f"File path is not valid from bronze processing: {bronze_s3_path}")
-            silver_s3_path = str(Path(SILVER_DATA_FOLDER) / path_suffix.with_name(f"records{DELTA_TABLE_SUFFIX}"))
-            errors_s3_path = str(Path(PROCESSING_ERRORS_DATA_FOLDER) / path_suffix.with_name(f"errors{PARQUET_TABLE_SUFFIX}"))
+                logger.error(f'File path is not valid from bronze processing: {bronze_s3_path}')
+            silver_s3_path = str(Path(SILVER_DATA_FOLDER) / path_suffix.with_name(f'records{DELTA_TABLE_SUFFIX}'))
+            errors_s3_path = str(Path(PROCESSING_ERRORS_DATA_FOLDER) / path_suffix.with_name(f'errors{PARQUET_TABLE_SUFFIX}'))
             archive_s3_path = str(Path(ARCHIVE_DATA_FOLDER) / path_suffix)
             if self.s3_client.file_exists(silver_s3_path):
-                logger.debug(f"{bronze_s3_path} already processed, skipping...")
+                logger.debug(f'{bronze_s3_path} already processed, skipping...')
                 continue
             yield {
-                "bronze_s3_path": bronze_s3_path,
-                "archive_s3_path": archive_s3_path,
-                "silver_s3_path": silver_s3_path,
-                "errors_s3_path": errors_s3_path,
+                'bronze_s3_path': bronze_s3_path,
+                'archive_s3_path': archive_s3_path,
+                'silver_s3_path': silver_s3_path,
+                'errors_s3_path': errors_s3_path,
             }
 
     def run(self) -> str:
-        """
-        generic wrapper to run all tasks
-        """
+        from data_integration_pipeline.io.delta_client import DeltaClient
+
+        delta_client = DeltaClient()
         for task in self.get_data_to_process():
-            self.process_data(**task)
+            delta_table = self.process_data(**task)
+            table = delta_client.read_table(delta_table)
+            print('-' * 30)
+            print(delta_table)
+            print('-' * 30)
+            print(table)
 
 
 def process_task(task_dict: dict):
@@ -122,6 +119,6 @@ def get_tasks() -> list[dict]:
     return list(job.get_data_to_process())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     job = ProcessBronzetoSilver()
     job.run()

@@ -10,5 +10,5 @@ def normalize_company_name(value: str) -> str:
     return value.translate(REPLACEMENT_TABLE).upper().strip()
 
 
-if __name__ == "__main__":
-    print(normalize_company_name("discord Inc."))
+if __name__ == '__main__':
+    print(normalize_company_name('discord Inc.'))

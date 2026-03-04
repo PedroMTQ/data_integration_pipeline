@@ -8,6 +8,6 @@ from data_integration_pipeline.core.data_processing.data_models.templates.model_
 
 class ModelLicense(BaseModel):
     model_config = BASE_CONFIG_DICT
-    _data_source: ClassVar[str] = "licenses_registry"
+    _data_source: ClassVar[str] = 'licenses_registry'
     license_id: str
     expiration_date: Optional[ModelDate]

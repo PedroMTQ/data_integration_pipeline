@@ -3,6 +3,7 @@ from typing import Iterable, Union
 import json
 import pyarrow.parquet as pq
 import pyarrow as pa
+import polars as pl
 from pathlib import Path
 import s3fs
 from data_integration_pipeline.settings import (
@@ -28,19 +29,19 @@ class FileReader:
         """
         Determines the file type and yields rows one by one.
         """
-        # This absolutely forbids the stream from restarting at Row 0.
+        # This forbids the stream from restarting at Row 0 (this was leadinng to a bug with duckdb)
         if self._generator is not None:
             return self._generator
 
         extension = Path(self._file_path).suffix.lower()
-        if extension == ".csv":
+        if extension == '.csv':
             self._generator = self._read_csv()
         elif extension == PARQUET_TABLE_SUFFIX:
             self._generator = self._read_parquet()
-        elif extension == ".json":
+        elif extension == '.json':
             self._generator = self._read_json()
         else:
-            raise ValueError(f"Unsupported file extension: {extension}")
+            raise ValueError(f'Unsupported file extension: {extension}')
         return self._generator
 
     def __next__(self):
@@ -53,9 +54,9 @@ class FileReader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        logger.debug(f"Finished reading from {self._file_path}")
+        logger.debug(f'Finished reading from {self._file_path}')
         # If your reader has an internal file handle, close it here
-        if hasattr(self, "fs") and hasattr(self, "_file_handle"):
+        if hasattr(self, 'fs') and hasattr(self, '_file_handle'):
             self._file_handle.close()
 
     def _read_json(self) -> Iterable[dict]:
@@ -81,23 +82,23 @@ class LocalFileReader(FileReader):
         super().__init__(as_table=as_table)
         self._file_path = file_path
         if not Path(file_path).exists():
-            raise FileNotFoundError(f"The file {file_path} does not exist.")
+            raise FileNotFoundError(f'The file {file_path} does not exist.')
 
     def _read_csv(self) -> Iterable[Union[dict, pa.Table]]:
         if self.as_table:
             # Binary mode is better for pyarrow's native CSV reader
-            self._file_handle = open(self._file_path, mode="rb")
+            self._file_handle = open(self._file_path, mode='rb')
             reader = pa_csv.open_csv(self._file_handle)
             for batch in reader:
                 yield pa.Table.from_batches([batch])
         else:
-            self._file_handle = open(self._file_path, mode="r", encoding="utf-8")
+            self._file_handle = open(self._file_path, mode='r', encoding='utf-8')
             reader = csv.DictReader(self._file_handle)
             for row in reader:
                 yield dict(row)
 
     def _read_parquet(self) -> Iterable[Union[dict, pa.Table]]:
-        self._file_handle = open(self._file_path, mode="rb")
+        self._file_handle = open(self._file_path, mode='rb')
         parquet_file = pq.ParquetFile(self._file_handle)
         for i in range(parquet_file.num_row_groups):
             table = parquet_file.read_row_group(i)
@@ -108,7 +109,7 @@ class LocalFileReader(FileReader):
                     yield row
 
     def _read_json(self) -> Iterable[dict]:
-        self._file_handle = open(self._file_path, mode="r", encoding="utf-8")
+        self._file_handle = open(self._file_path, mode='r', encoding='utf-8')
         return super()._read_json()
 
 
@@ -116,7 +117,7 @@ class S3FileReader(FileReader):
     def __init__(
         self,
         s3_path: str,
-        bucket_name: str,
+        bucket_name: str = DATA_BUCKET,
         as_table: bool = False,
         aws_access_key: str = S3_ACCESS_KEY,
         aws_secret_access_key: str = S3_SECRET_ACCESS_KEY,
@@ -124,26 +125,25 @@ class S3FileReader(FileReader):
     ):
         super().__init__(as_table=as_table)
         self.bucket_name = bucket_name
-        if not s3_path.startswith(f"s3://{self.bucket_name}/"):
-            s3_path = f"s3://{self.bucket_name}/{s3_path}"
+        if not s3_path.startswith(f's3://{self.bucket_name}/'):
+            s3_path = f's3://{self.bucket_name}/{s3_path}'
         self._file_path = s3_path
-        # Initialize s3fs with your specific credentials/endpoint
-        self.fs = s3fs.S3FileSystem(key=aws_access_key, secret=aws_secret_access_key, client_kwargs={"endpoint_url": s3_endpoint_url})
+        self.fs = s3fs.S3FileSystem(key=aws_access_key, secret=aws_secret_access_key, client_kwargs={'endpoint_url': s3_endpoint_url})
 
     def _read_csv(self) -> Iterable[Union[dict, pa.Table]]:
         if self.as_table:
-            self._file_handle = self.fs.open(self._file_path, mode="rb")
+            self._file_handle = self.fs.open(self._file_path, mode='rb')
             reader = pa_csv.open_csv(self._file_handle)
             for batch in reader:
                 yield pa.Table.from_batches([batch])
         else:
-            self._file_handle = self.fs.open(self._file_path, mode="rt", encoding="utf-8")
+            self._file_handle = self.fs.open(self._file_path, mode='rt', encoding='utf-8')
             reader = csv.DictReader(self._file_handle)
             for row in reader:
                 yield dict(row)
 
     def _read_parquet(self) -> Iterable[Union[dict, pa.Table]]:
-        self._file_handle = self.fs.open(self._file_path, mode="rb")
+        self._file_handle = self.fs.open(self._file_path, mode='rb')
         parquet_file = pq.ParquetFile(self._file_handle)
         for i in range(parquet_file.num_row_groups):
             table = parquet_file.read_row_group(i)
@@ -154,12 +154,16 @@ class S3FileReader(FileReader):
                     yield row
 
     def _read_json(self) -> Iterable[dict]:
-        # s3fs handles the text stream for json.load perfectly
-        self._file_handle = self.fs.open(self._file_path, mode="rt", encoding="utf-8")
+        self._file_handle = self.fs.open(self._file_path, mode='rt', encoding='utf-8')
         return super()._read_json()
 
+    def read_table(self) -> pl.DataFrame:
+        self.as_table = True
+        # this is generally never used, mostly just for debugging purposes
+        return pl.from_arrow(pa.concat_tables(self._read_parquet()))
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     # file_path = "/home/pedroq/workspace/data_integration_pipeline/tests/data/business_entity_registry.csv"
     # for table in LocalFileReader(file_path, as_table=True):
     #     print(table.shape)
@@ -169,12 +173,14 @@ if __name__ == "__main__":
     # s3_path = "entity_resolution/019cb3fb-4126-7e37-9272-5c1e6371d54b/integrated_records.parquet"
     # for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
     #     print(table.shape)
-    s3_path = "entity_resolution/019cb3fb-4126-7e37-9272-5c1e6371d54b/links.parquet"
-    for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
-        print(table.shape)
-        table = table.sort_by("primary_key_id")
-        for row in table.to_pylist():
-            print(row)
-    # s3_path = "entity_resolution/019ca4b0-2e7d-7308-b854-d81e5533bd5b/metadata.json"
+    s3_path = 'entity_resolution/019cb836-1c44-7ee8-a05a-ddcd13734e9f/dedup_integrated_records.parquet'
+    table = S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True).read_table()
+    print(table)
+    # for table in S3FileReader(s3_path, bucket_name=DATA_BUCKET, as_table=True):
+    #     print(table.shape)
+    #     table = table.sort_by('primary_key_id')
+    #     for row in table.to_pylist():
+    #         print(row)
+    # # s3_path = "entity_resolution/019ca4b0-2e7d-7308-b854-d81e5533bd5b/metadata.json"
     # data = S3FileReader(s3_path, bucket_name=DATA_BUCKET).read_json()
     # print(data)

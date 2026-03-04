@@ -14,17 +14,17 @@ class DeduplicateIntegratedRecordsJob:
 
     def process_data(self, metadata: dict) -> str:
         run_metadata = SplinkRunMetadata(**metadata)
-        logger.info(f"Processing {run_metadata.integrated_records_s3_path} to create deduplicated records data")
-        processor = DuplicatesProcessor(partition_by_keys=["anchor_entity.entity_id", "anchor_entity.data_source"])
+        logger.info(f'Processing {run_metadata.integrated_records_s3_path} to create deduplicated records data')
+        processor = DuplicatesProcessor(partition_by_keys=['anchor_entity.entity_id', 'anchor_entity.data_source'])
         processor.run(
-            input_path=run_metadata.integrated_records_s3_path, output_path=run_metadata.deduplicated_records_s3_path, data_type="integrated"
+            input_path=run_metadata.integrated_records_s3_path, output_path=run_metadata.deduplicated_records_s3_path, data_type='integrated'
         )
         return run_metadata.deduplicated_records_s3_path
 
     def get_data_to_process(self) -> list[dict]:
         metadata_list = []
-        for s3_path in self.s3_client.get_files(prefix=ENTITY_RESOLUTION_DATA_FOLDER, file_name_pattern=r"metadata\.json"):
-            metadata_dict = S3FileReader(s3_path=s3_path, bucket_name=DATA_BUCKET).read_json()
+        for s3_path in self.s3_client.get_files(prefix=ENTITY_RESOLUTION_DATA_FOLDER, file_name_pattern=r'metadata\.json'):
+            metadata_dict = S3FileReader(s3_path=s3_path, bucket_names=DATA_BUCKET).read_json()
             metadata = SplinkRunMetadata(**metadata_dict)
             if self.s3_client.file_exists(s3_path=metadata.integrated_records_s3_path):
                 metadata_list.append(metadata)
@@ -32,11 +32,17 @@ class DeduplicateIntegratedRecordsJob:
             yield run_metadata.to_dict()
 
     def run(self) -> str:
-        """
-        generic wrapper to run all tasks
-        """
+
         for metadata in self.get_data_to_process():
-            self.process_data(metadata)
+            s3_path = self.process_data(metadata)
+            print('-' * 30)
+            print(SplinkRunMetadata(**metadata))
+            print('-' * 30)
+            table = S3FileReader(s3_path=s3_path).read_table()
+            print('-' * 30)
+            print(s3_path)
+            print('-' * 30)
+            print(table)
 
 
 def process_task(metadata: dict):
@@ -49,6 +55,6 @@ def get_tasks() -> list[dict]:
     return list(job.get_data_to_process())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     job = DeduplicateIntegratedRecordsJob()
     job.run()

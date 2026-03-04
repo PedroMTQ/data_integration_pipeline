@@ -12,11 +12,11 @@ from data_integration_pipeline.core.data_mart.gold_record import Record as GoldR
 from data_integration_pipeline.core.data_processing.data_models.templates.base_record import BaseRecord, BaseRecordType
 
 __all__ = [
-    "BusinessEntityRegistryRecord",
-    "LicensesRegistryRecord",
-    "SubContractorsRegistryRecord",
-    "IntegratedRecord",
-    "BaseRecord",
-    "BaseRecordType",
-    "GoldRecord",
+    'BusinessEntityRegistryRecord',
+    'LicensesRegistryRecord',
+    'SubContractorsRegistryRecord',
+    'IntegratedRecord',
+    'BaseRecord',
+    'BaseRecordType',
+    'GoldRecord',
 ]

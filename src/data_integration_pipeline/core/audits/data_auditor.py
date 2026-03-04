@@ -16,13 +16,13 @@ from data_integration_pipeline.core.data_processing.data_models.data_sources imp
 
 
 class DataAuditor:
-    data_source_name: str = "pandas"
+    data_source_name: str = 'pandas'
     # ! tried with duckdb but kept getting this error: "list index out of range". doesn't seem very well supported
 
     def __init__(
         self,
         data_model: Type[BaseRecordType],
-        dataset_stage: Literal["bronze", "silver", "gold"],
+        dataset_stage: Literal['bronze', 'silver', 'gold'],
         additional_rules: list[dict] = None,
         rebuild_suite: bool = True,
     ):
@@ -30,89 +30,89 @@ class DataAuditor:
         self.additional_rules = additional_rules
         self._rebuild_suite = rebuild_suite
 
-        data_suffix = f"{data_model._data_source}_{dataset_stage}"
-        self.batch_definition_name = f"sample_{data_suffix}"
-        self.duckdb_table_name = f"audit_{data_suffix}"
-        self.run_name = f"audit_{data_suffix}"
+        data_suffix = f'{data_model._data_source}_{dataset_stage}'
+        self.batch_definition_name = f'sample_{data_suffix}'
+        self.duckdb_table_name = f'audit_{data_suffix}'
+        self.run_name = f'audit_{data_suffix}'
         self.data_asset_name = data_model._data_source
-        self.suite_name = f"suite_{data_suffix}"
-        self.validation_definition_name = f"validation_definition_{data_suffix}"
+        self.suite_name = f'suite_{data_suffix}'
+        self.validation_definition_name = f'validation_definition_{data_suffix}'
 
         self.run_id = gx.RunIdentifier(run_name=self.run_name)
-        self.context = gx.get_context(mode="file", project_root_dir=os.path.join(TEMP, "audits"))
-        self.db_path = os.path.join(TEMP, "audits", "duckdb", "audit.db")
+        self.context = gx.get_context(mode='file', project_root_dir=os.path.join(TEMP, 'audits'))
+        self.db_path = os.path.join(TEMP, 'audits', 'duckdb', 'audit.db')
         self.__setup_expectations()
 
     def _get_expectations_definitions(self) -> list[dict[str, Any]]:
         res = [
             {
                 # I include both the alias mappings (which have a prefix) and serialized model mappings
-                "patterns": ["*_id"],
-                "rules": [
+                'patterns': ['*_id'],
+                'rules': [
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValuesToBeUnique,
                         expectation_kwargs={
-                            "severity": "warning",
-                            "mostly": 0.95,
-                            "meta": {
-                                "description": "Ensures IDs dont repeat too much",
-                                "notes": "If this fails, there is likely a data duplication issue.",
+                            'severity': 'warning',
+                            'mostly': 0.95,
+                            'meta': {
+                                'description': 'Ensures IDs dont repeat too much',
+                                'notes': 'If this fails, there is likely a data duplication issue.',
                             },
                         },
                     )
                 ],
             },
             {
-                "patterns": ["company_name"],
-                "rules": [
+                'patterns': ['company_name'],
+                'rules': [
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValuesToNotBeNull,
-                        expectation_kwargs={"mostly": 1.0, "severity": "critical"},
+                        expectation_kwargs={'mostly': 1.0, 'severity': 'critical'},
                     ),
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValuesToBeUnique,
-                        expectation_kwargs={"mostly": 0.7, "severity": "warning"},
+                        expectation_kwargs={'mostly': 0.7, 'severity': 'warning'},
                     ),
                 ],
             },
             {
-                "patterns": ["company_name_normalized"],
-                "rules": [
+                'patterns': ['company_name_normalized'],
+                'rules': [
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValuesToNotBeNull,
-                        expectation_kwargs={"mostly": 0.95, "severity": "critical"},
+                        expectation_kwargs={'mostly': 0.95, 'severity': 'critical'},
                     )
                 ],
             },
             {
-                "patterns": ["address_1"],
-                "rules": [
+                'patterns': ['address_1'],
+                'rules': [
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValuesToNotBeNull,
-                        expectation_kwargs={"mostly": 0.3, "severity": "warning"},
+                        expectation_kwargs={'mostly': 0.3, 'severity': 'warning'},
                     ),
                 ],
             },
             {
-                "patterns": ["zip_code"],
-                "rules": [
+                'patterns': ['zip_code'],
+                'rules': [
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValueLengthsToBeBetween,
                         expectation_kwargs={
-                            "min_value": 3,
-                            "max_value": 12,
-                            "mostly": 0.80,
-                            "severity": "warning",
+                            'min_value': 3,
+                            'max_value': 12,
+                            'mostly': 0.80,
+                            'severity': 'warning',
                         },
                     ),
                 ],
             },
             {
-                "patterns": ["city"],
-                "rules": [
+                'patterns': ['city'],
+                'rules': [
                     ModelExpectationTemplate(
                         expectation_class=gx.expectations.ExpectColumnValuesToNotBeNull,
-                        expectation_kwargs={"mostly": 0.7, "severity": "warning"},
+                        expectation_kwargs={'mostly': 0.7, 'severity': 'warning'},
                     ),
                 ],
             },
@@ -127,12 +127,12 @@ class DataAuditor:
         self.expectations = []
         for entry in definitions:
             # 1. Uncompress pattern to actual columns
-            column_patterns = entry.get("patterns")
-            rules = entry.get("rules")
+            column_patterns = entry.get('patterns')
+            rules = entry.get('rules')
             if not column_patterns:
-                raise Exception(f"Invalid rule (missing pattern key): {entry}")
+                raise Exception(f'Invalid rule (missing pattern key): {entry}')
             if not rules:
-                raise Exception(f"Invalid rule (missing rules key): {entry}")
+                raise Exception(f'Invalid rule (missing rules key): {entry}')
             matched_cols = set()
             for p in column_patterns:
                 matches = fnmatch.filter(self.audit_columns, p)
@@ -147,9 +147,9 @@ class DataAuditor:
                     try:
                         expectation_model: ModelExpectation = expectation_template.apply_to(col)
                         self.expectations.append(expectation_model)
-                    except Exception as e:
-                        logger.exception(f"Failed to add {col} ruke: {expectation_model}")
-                        raise e
+                    except Exception:
+                        logger.exception(f'Failed to add {col} ruke: {expectation_model}')
+                        raise
 
     def __setup_data_source(self):
         # Add Data Source
@@ -207,28 +207,28 @@ class DataAuditor:
             self.suite.add_expectation(expectation_model.expectation)
 
     def __process_results(self, results: list[dict]) -> bool:
-        exception_failures = [r for r in results if not r["success"] and r["exception_info"].get("exception_info", {})]
-        critical_failures = [r for r in results if not r["success"] and r["expectation_config"]["meta"].get("severity") == "critical"]
-        warning_failures = [r for r in results if not r["success"] and r["expectation_config"]["meta"].get("severity") == "warning"]
-        info_failures = [r for r in results if not r["success"] and r["expectation_config"]["meta"].get("severity") == "info"]
+        exception_failures = [r for r in results if not r['success'] and r['exception_info'].get('exception_info', {})]
+        critical_failures = [r for r in results if not r['success'] and r['expectation_config']['meta'].get('severity') == 'critical']
+        warning_failures = [r for r in results if not r['success'] and r['expectation_config']['meta'].get('severity') == 'warning']
+        info_failures = [r for r in results if not r['success'] and r['expectation_config']['meta'].get('severity') == 'info']
         # 4. Define your "Business Logic" for success
         if exception_failures:
-            logger.critical(f"❌ AUDIT FAILED: {len(exception_failures)} exceptions found.")
+            logger.critical(f'❌ AUDIT FAILED: {len(exception_failures)} exceptions found.')
             # Logic to handle hard stop (e.g., return False or raise Exception)
             return False
         if critical_failures:
-            logger.critical(f"❌ AUDIT FAILED: {len(critical_failures)} critical errors found.")
+            logger.critical(f'❌ AUDIT FAILED: {len(critical_failures)} critical errors found.')
             # Logic to handle hard stop (e.g., return False or raise Exception)
             return False
         if warning_failures:
-            logger.warning(f"⚠️ AUDIT PASSED WITH WARNINGS: {len(warning_failures)} issues detected.")
+            logger.warning(f'⚠️ AUDIT PASSED WITH WARNINGS: {len(warning_failures)} issues detected.')
             # You can still return True here so the DuckDB dump proceeds
             return True
         if info_failures:
-            logger.info(f"⚠️ AUDIT PASSED WITH INFO: {len(info_failures)} issues detected.")
+            logger.info(f'⚠️ AUDIT PASSED WITH INFO: {len(info_failures)} issues detected.')
             # You can still return True here so the DuckDB dump proceeds
             return True
-        logger.info("✅ AUDIT PASSED: All expectations met.")
+        logger.info('✅ AUDIT PASSED: All expectations met.')
         return True
 
     def export_docs(self):
@@ -242,28 +242,28 @@ class DataAuditor:
         self.__setup_val_definition()
         # TODO gx db engines are not great for my current setup, consider improving this. but it should be ok for the amount of data we audit
         df = pa.Table.from_batches(data).to_pandas()
-        results = self.val_definition.run(batch_parameters={"dataframe": df}, run_id=self.run_id)
-        return self.__process_results(results=results.get("results", {}))
+        results = self.val_definition.run(batch_parameters={'dataframe': df}, run_id=self.run_id)
+        return self.__process_results(results=results.get('results', {}))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
     from data_integration_pipeline.core.audits.s3_weighted_data_sampler import S3WeightedParquetSampler
 
-    s3_path = "silver/business_entity_registry/business_entity_registry.delta"
+    s3_path = 'silver/business_entity_registry/business_entity_registry.delta'
     data_model = ModelMapper.get_data_model(s3_path)
     s3_sampler = S3WeightedParquetSampler(
         s3_path=s3_path,
-        weight_column="city",
+        weight_column='city',
         default_weight=1,
         target_total_rows=100,
     )
     # Consume the generator to trigger the sampling
-    print("get_total_raw_records", s3_sampler.get_total_raw_records())
-    print("get_raw_data_distribution", s3_sampler.get_raw_data_distribution())
-    print("get_total_sampled_records", s3_sampler.get_total_sampled_records())
-    print("get_sample_data_distribution", s3_sampler.get_sample_data_distribution())
-    data_auditor = DataAuditor(data_model=data_model, dataset_stage="silver")
+    print('get_total_raw_records', s3_sampler.get_total_raw_records())
+    print('get_raw_data_distribution', s3_sampler.get_raw_data_distribution())
+    print('get_total_sampled_records', s3_sampler.get_total_sampled_records())
+    print('get_sample_data_distribution', s3_sampler.get_sample_data_distribution())
+    data_auditor = DataAuditor(data_model=data_model, dataset_stage='silver')
     # data_sample = s3_sampler.gets_data()
     # results = data_auditor.run(data=data_sample)
     # print(results)

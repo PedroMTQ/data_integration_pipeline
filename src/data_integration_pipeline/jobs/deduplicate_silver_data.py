@@ -10,28 +10,35 @@ from data_integration_pipeline.settings import SILVER_DATA_FOLDER, PARQUET_TABLE
 
 class DeduplicateSilverDataJob:
     def process_data(self, silver_s3_path: str, deduplicated_s3_path: str) -> str:
-        logger.info(f"Processing {silver_s3_path} to create deduplicated records data")
+        logger.info(f'Processing {silver_s3_path} to create deduplicated records data')
         data_model = ModelMapper().get_data_model(silver_s3_path)
         processor = DuplicatesProcessor(partition_by_keys=[data_model._primary_key])
-        return processor.run(input_path=silver_s3_path, output_path=deduplicated_s3_path, data_type="silver")
+        return processor.run(input_path=silver_s3_path, output_path=deduplicated_s3_path, data_type='silver')
 
     def get_data_to_process(self) -> Iterable[dict]:
         s3_client = S3Client()
-        for silver_s3_path in s3_client.get_delta_tables(prefix="silver"):
+        for silver_s3_path in s3_client.get_delta_tables(prefix='silver'):
             path_obj = Path(silver_s3_path)
             path_suffix = path_obj.relative_to(SILVER_DATA_FOLDER)
-            deduplicated_s3_path = str(Path(SILVER_DATA_FOLDER) / path_suffix.with_name(f"deduplicated{PARQUET_TABLE_SUFFIX}"))
+            deduplicated_s3_path = str(Path(SILVER_DATA_FOLDER) / path_suffix.with_name(f'deduplicated{PARQUET_TABLE_SUFFIX}'))
             yield {
-                "silver_s3_path": silver_s3_path,
-                "deduplicated_s3_path": deduplicated_s3_path,
+                'silver_s3_path': silver_s3_path,
+                'deduplicated_s3_path': deduplicated_s3_path,
             }
 
     def run(self) -> str:
-        """
-        generic wrapper to run all tasks
-        """
+        from data_integration_pipeline.io.file_reader import S3FileReader
+
         for task in self.get_data_to_process():
-            self.process_data(**task)
+            s3_path = self.process_data(**task)
+            print('-' * 30)
+            print(f'Table: {s3_path}')
+            print('-' * 30)
+            table = S3FileReader(s3_path=s3_path).read_table()
+            print('-' * 30)
+            print(s3_path)
+            print('-' * 30)
+            print(table)
 
 
 def process_task(task_dict: dict):
@@ -44,6 +51,6 @@ def get_tasks() -> list[dict]:
     return list(job.get_data_to_process())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     job = DeduplicateSilverDataJob()
     job.run()

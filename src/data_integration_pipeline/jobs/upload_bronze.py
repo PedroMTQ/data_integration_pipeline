@@ -18,11 +18,11 @@ class UploadBronzeJob:
             s3_path = os.path.join(BRONZE_DATA_FOLDER, parent_folder, file)
             upload_status = self.s3_client.upload_file(local_path=local_file_path, s3_path=s3_path)
             if upload_status:
-                logger.info(f"Uploaded {local_file_path} to {s3_path}")
+                logger.info(f'Uploaded {local_file_path} to {s3_path}')
             else:
-                logger.warning(f"Failed to upload {local_file_path} to {s3_path}")
+                logger.warning(f'Failed to upload {local_file_path} to {s3_path}')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     job = UploadBronzeJob()
     job.run()

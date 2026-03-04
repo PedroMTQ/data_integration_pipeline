@@ -16,4 +16,4 @@ class Metrics:
             self.failures += 1
 
     def __repr__(self):
-        return f"Total: {self.total}, Success: {self.success}, Failures: {self.failures}"
+        return f'Total: {self.total}, Success: {self.success}, Failures: {self.failures}'

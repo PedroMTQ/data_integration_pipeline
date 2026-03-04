@@ -5,6 +5,7 @@ from typing import Iterable, Optional
 import duckdb
 import pyarrow as pa
 from data_integration_pipeline.io.logger import logger
+from data_integration_pipeline.settings import S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY, S3_ENDPOINT_URL
 
 
 class DuckdbClient:
@@ -20,18 +21,46 @@ class DuckdbClient:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
     def __str__(self):
-        return f"DuckDB client table:{self.table_name} stored at:{self.db_path}"
+        return f'DuckDB client table:{self.table_name} stored at:{self.db_path}'
+
+    @staticmethod
+    def load_delta_scan(connection: duckdb.DuckDBPyConnection):
+        connection.execute('INSTALL delta; LOAD delta;')
+
+    @staticmethod
+    def load_s3_connector(connection: duckdb.DuckDBPyConnection):
+        connection.execute('INSTALL httpfs; LOAD httpfs;')
+
+    @staticmethod
+    def add_s3_secret(connection: duckdb.DuckDBPyConnection, endpoint: str | None = None):
+        """
+        Configures DuckDB's S3 access for MinIO/S3-compatible storage.
+        """
+        endpoint = endpoint or S3_ENDPOINT_URL
+        endpoint = endpoint.replace('http://', '').replace('https://', '')
+        connection.execute(f"""
+                CREATE OR REPLACE SECRET minio_secret (
+                    TYPE S3,
+                    PROVIDER config,
+                    KEY_ID '{S3_ACCESS_KEY}',
+                    SECRET '{S3_SECRET_ACCESS_KEY}',
+                    REGION 'us-east-1',
+                    ENDPOINT '{endpoint}',
+                    URL_STYLE 'path',
+                    USE_SSL 'false'
+                );
+            """)
 
     def get_count(self) -> int:
         with duckdb.connect(self.db_path) as conn:
-            return conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()[0]
+            return conn.execute(f'SELECT COUNT(*) FROM {self.table_name}').fetchone()[0]
 
     def exists(self):
         if not os.path.exists(self.db_path):
             return False
         try:
             with duckdb.connect(self.db_path) as conn:
-                conn.execute(f"DESCRIBE {self.table_name}")
+                conn.execute(f'DESCRIBE {self.table_name}')
                 if self.get_count():
                     return True
                 else:
@@ -41,36 +70,36 @@ class DuckdbClient:
 
     def drop_table(self):
         with duckdb.connect(self.db_path) as connection:
-            connection.execute(f"DROP TABLE IF EXISTS {self.table_name}")
+            connection.execute(f'DROP TABLE IF EXISTS {self.table_name}')
 
     def get_schema(self) -> pa.Schema | None:
         try:
             with duckdb.connect(self.db_path) as connection:
-                return connection.execute(f"SELECT * FROM {self.table_name} LIMIT 0").fetch_arrow_table().schema
+                return connection.execute(f'SELECT * FROM {self.table_name} LIMIT 0').fetch_arrow_table().schema
         except Exception as _:
             return None
 
     def __save_into_disk(self, data: Iterable[pa.Table]) -> int:
         """Consumes the entire iterable and writes it to DuckDB."""
-        logger.info(f"Saving data into disk at {self.db_path} to {self.table_name}")
+        logger.info(f'Saving data into disk at {self.db_path} to {self.table_name}')
         total_rows = 0
         with duckdb.connect(self.db_path) as connection:
             # We create the table with the first batch to define schema
             try:
                 data_batch = next(data)
-                connection.register("data_batch", data_batch)
-                connection.execute(f"CREATE OR REPLACE TABLE {self.table_name} AS SELECT * FROM data_batch")
-                connection.unregister("data_batch")
+                connection.register('data_batch', data_batch)
+                connection.execute(f'CREATE OR REPLACE TABLE {self.table_name} AS SELECT * FROM data_batch')
+                connection.unregister('data_batch')
                 total_rows += len(data_batch)
             except StopIteration:
-                logger.warning("Stream was empty. Nothing to save.")
+                logger.warning('Stream was empty. Nothing to save.')
                 return total_rows
             for data_batch in data:
                 total_rows += len(data_batch)
-                connection.register("data_batch", data_batch)
-                connection.execute(f"INSERT INTO {self.table_name} SELECT * FROM data_batch")
-                connection.unregister("data_batch")
-        logger.info(f"Successfully stored stream ({total_rows} rows) to {self.db_path}")
+                connection.register('data_batch', data_batch)
+                connection.execute(f'INSERT INTO {self.table_name} SELECT * FROM data_batch')
+                connection.unregister('data_batch')
+        logger.info(f'Successfully stored stream ({total_rows} rows) to {self.db_path}')
         return total_rows
 
     def save_to_disk(self, data: Iterable[pa.Table]) -> int:
@@ -85,27 +114,27 @@ class DuckdbClient:
         """
         Fetches data from DuckDB.
         """
-        select_clause = "*"
+        select_clause = '*'
         if columns_filter:
             # Ensure we only select columns that actually exist in the DB
             valid_cols = [c for c in columns_filter if c in self.get_schema().names]
-            select_clause = ", ".join([f'"{c}"' for c in valid_cols])
+            select_clause = ', '.join([f'"{c}"' for c in valid_cols])
 
-        logger.info(f"Loading data from disk at {self.db_path}")
+        logger.info(f'Loading data from disk at {self.db_path}')
         with duckdb.connect(self.db_path) as conn:
             # DuckDB's fetch_record_batch_reader is great for large datasets
             # as it streams the results rather than loading the whole table at once.
-            reader = conn.execute(f"SELECT {select_clause} FROM {self.table_name}").fetch_record_batch(self.batch_size)
+            reader = conn.execute(f'SELECT {select_clause} FROM {self.table_name}').fetch_record_batch(self.batch_size)
             for batch in reader:
                 # Convert RecordBatch to Table for consistency with your previous code
                 yield pa.Table.from_batches([batch])
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     from data_integration_pipeline.settings import TEMP
 
-    db_path = os.path.join(TEMP, "audits", "duckdb", "audit.db")
-    table_name = "audit_business_entity_registry_silver"
+    db_path = os.path.join(TEMP, 'audits', 'duckdb', 'audit.db')
+    table_name = 'audit_business_entity_registry_silver'
     duckdb_client = DuckdbClient(db_path=db_path, table_name=table_name)
     data = duckdb_client.get_data()
     for batch in data:

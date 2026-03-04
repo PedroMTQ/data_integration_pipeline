@@ -6,7 +6,7 @@ from data_integration_pipeline.core.schema_converter import PyarrowSchemaGenerat
 import pyarrow as pa
 
 
-BASE_CONFIG_DICT = ConfigDict(populate_by_name=True, extra="ignore", str_strip_whitespace=True, arbitrary_types_allowed=True)
+BASE_CONFIG_DICT = ConfigDict(populate_by_name=True, extra='ignore', str_strip_whitespace=True, arbitrary_types_allowed=True)
 
 
 class BaseRecord(BaseModel):
@@ -23,11 +23,11 @@ class BaseRecord(BaseModel):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        for attr in ["_record_schema", "_data_source", "_primary_key"]:
+        for attr in ['_record_schema', '_data_source', '_primary_key']:
             # Check if the subclass has defined data_source and it's not the base version
             if not hasattr(cls, attr):
-                raise TypeError(f"Class {cls.__name__} must define a unique <{attr}> ClassVar.")
+                raise TypeError(f'Class {cls.__name__} must define a unique <{attr}> ClassVar.')
         cls._pa_schema = PyarrowSchemaGenerator(cls._record_schema).run()
 
 
-BaseRecordType = TypeVar("BaseRecord", bound=BaseRecord)
+BaseRecordType = TypeVar('BaseRecord', bound=BaseRecord)

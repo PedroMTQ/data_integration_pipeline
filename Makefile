@@ -73,7 +73,10 @@ update:
 
 test:
 	@echo "Running tests via uv..."
-	uv run --with pytest pytest
+	@$(SETUP_ENV_VARS)
+	bash --rcfile <(echo "source ~/.bashrc; source scripts/load_dot_env.sh; source $${ENV["ENV_PATH"]}; export IN_MAKE_SHELL=true") \
+	-c "uv run --with pytest pytest -q"
+	unset ENV
 
 format:
 	@echo "Running ruff formatter/linter via temporary uv environment..."

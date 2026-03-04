@@ -1,5 +1,5 @@
 from data_integration_pipeline.io.s3_client import S3Client
-from data_integration_pipeline.settings import ENTITY_RESOLUTION_DATA_FOLDER, DATA_BUCKET, TEMP
+from data_integration_pipeline.settings import ENTITY_RESOLUTION_DATA_FOLDER, TEMP
 import os
 from collections import Counter
 from data_integration_pipeline.io.file_reader import S3FileReader
@@ -15,13 +15,13 @@ from data_integration_pipeline.core.utils import get_latest_metadata_by_table_gr
 class CreateIntegratedRecords:
     def process_data(self, metadata: dict) -> str:
         run_metadata = SplinkRunMetadata(**metadata)
-        logger.info(f"Processing {run_metadata}")
-        db_path = os.path.join(TEMP, ENTITY_RESOLUTION_DATA_FOLDER, run_metadata.run_id, "records.duckdb")
-        processor = LinksProcessor(metadata=run_metadata, bucket_name=DATA_BUCKET, db_path=db_path)
-        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, run_metadata.run_id, "errors.parquet")
-        integrated_records_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, run_metadata.run_id, "integrated_records.parquet")
-        fail_writer = S3FileWriter(s3_path=errors_s3_path, bucket_name=DATA_BUCKET)
-        integrated_records_writer = S3FileWriter(s3_path=integrated_records_s3_path, bucket_name=DATA_BUCKET)
+        logger.info(f'Processing {run_metadata}')
+        db_path = os.path.join(TEMP, ENTITY_RESOLUTION_DATA_FOLDER, run_metadata.run_id, 'records.duckdb')
+        processor = LinksProcessor(metadata=run_metadata, db_path=db_path)
+        errors_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, run_metadata.run_id, 'errors.parquet')
+        integrated_records_s3_path = os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, run_metadata.run_id, 'integrated_records.parquet')
+        fail_writer = S3FileWriter(s3_path=errors_s3_path)
+        integrated_records_writer = S3FileWriter(s3_path=integrated_records_s3_path)
         metrics = Metrics()
         records_to_alt_entities_counter = Counter()
         with integrated_records_writer as writer, fail_writer as errors_writer:
@@ -35,34 +35,41 @@ class CreateIntegratedRecords:
                     writer.write_row(record.model_dump())
                     metrics.log_result(is_success=True)
                 except Exception as e:
-                    # TODO change to error when we have better datas
-                    logger.debug(f"Error processing integrated record: {record} with {len(cluster)} records in cluster {cluster} due to  {e}")
-                    cluster_dict = {"cluster_id": [i.get("cluster_id") for i in cluster][0], "data": cluster}
+                    # TODO change to error when we have better data
+                    logger.debug(f'Error processing integrated record: {record} with {len(cluster)} records in cluster {cluster} due to  {e}')
+                    cluster_dict = {'cluster_id': [i.get('cluster_id') for i in cluster][0], 'data': cluster}
                     errors_writer.write_row(cluster_dict)
                     metrics.log_result(is_success=False)
-        logger.info(f"Processed {run_metadata.run_id} and wrote output to {integrated_records_s3_path}. File metrics: {metrics}")
-        logger.info(f"Records to alt entities counter: {records_to_alt_entities_counter}")
+        logger.info(f'Processed {run_metadata.run_id} and wrote output to {integrated_records_s3_path}. File metrics: {metrics}')
+        logger.info(f'Records to alt entities counter: {records_to_alt_entities_counter}')
         if metrics.failures:
-            logger.warning(f"Wrote {metrics.failures} invalid rows to {errors_s3_path}")
+            logger.warning(f'Wrote {metrics.failures} invalid rows to {errors_s3_path}')
         return integrated_records_s3_path
 
     def get_data_to_process(self) -> list[dict]:
         metadata_list = []
         s3_client = S3Client()
-        for s3_path in s3_client.get_files(prefix=ENTITY_RESOLUTION_DATA_FOLDER, file_name_pattern=r"metadata\.json"):
-            metadata = S3FileReader(s3_path=s3_path, bucket_name=DATA_BUCKET).read_json()
+        for s3_path in s3_client.get_files(prefix=ENTITY_RESOLUTION_DATA_FOLDER, file_name_pattern=r'metadata\.json'):
+            metadata = S3FileReader(s3_path=s3_path).read_json()
             metadata_list.append(SplinkRunMetadata(**metadata))
         run_metadata: SplinkRunMetadata
         for run_metadata in get_latest_metadata_by_table_group(metadata_list=metadata_list):
             yield run_metadata.to_dict()
 
     def run(self) -> str:
-        """
-        generic wrapper to run all tasks
-        """
+        from data_integration_pipeline.io.file_reader import S3FileReader
+
         list_run_metadata: list[dict] = self.get_data_to_process()
-        for run_metadata in list_run_metadata:
-            self.process_data(run_metadata)
+        for metadata in list_run_metadata:
+            s3_path = self.process_data(metadata)
+            print('-' * 30)
+            print(SplinkRunMetadata(**metadata))
+            print('-' * 30)
+            table = S3FileReader(s3_path=s3_path).read_table()
+            print('-' * 30)
+            print(s3_path)
+            print('-' * 30)
+            print(table)
 
 
 def process_task(metadata: dict):
@@ -76,6 +83,6 @@ def get_tasks() -> list[dict]:
     return list(job.get_data_to_process())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     job = CreateIntegratedRecords()
     job.run()

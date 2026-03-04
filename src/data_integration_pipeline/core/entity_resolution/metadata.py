@@ -29,28 +29,28 @@ class SplinkRunMetadata:
 
     def __str__(self) -> str:
         def format_section(title, data):
-            lines = [f"\n{title}:"]
+            lines = [f'\n{title}:']
             for k, v in data.items():
                 if isinstance(v, dict):
-                    lines.append(f"  • {k.replace('_', ' ').title()}:")
+                    lines.append(f'  • {k.replace("_", " ").title()}:')
                     for sub_k, sub_v in v.items():
-                        lines.append(f"    - {sub_k}: {sub_v}")
+                        lines.append(f'    - {sub_k}: {sub_v}')
                 elif isinstance(v, list):
-                    lines.append(f"  • {k.replace('_', ' ').title()}: {', '.join(map(str, v))}")
+                    lines.append(f'  • {k.replace("_", " ").title()}: {", ".join(map(str, v))}')
                 else:
-                    lines.append(f"  • {k.replace('_', ' ').title()}: {v}")
-            return "\n".join(lines)
+                    lines.append(f'  • {k.replace("_", " ").title()}: {v}')
+            return '\n'.join(lines)
 
         return (
-            f"\n{'─' * 60}"
-            f"\n🚀 Run ID: {self.run_id}\n"
-            f"📅 Time:    {self.timestamp}\n"
-            f"📍 S3 Path: {self.links_s3_path}\n"
-            f"{format_section('📥 Inputs', self.inputs)}\n"
-            f"{format_section('📤 Outputs', self.outputs)}\n"
-            f"{format_section('📤 Overlap Report', self.overlap_report)}\n"
-            f"{format_section('⚙️  Model Details', self.model_metadata)}\n"
-            f"{'─' * 60}\n"
+            f'\n{"─" * 60}'
+            f'\n🚀 Run ID: {self.run_id}\n'
+            f'📅 Time:    {self.timestamp}\n'
+            f'📍 S3 Path: {self.links_s3_path}\n'
+            f'{format_section("📥 Inputs", self.inputs)}\n'
+            f'{format_section("📤 Outputs", self.outputs)}\n'
+            f'{format_section("📤 Overlap Report", self.overlap_report)}\n'
+            f'{format_section("⚙️  Model Details", self.model_metadata)}\n'
+            f'{"─" * 60}\n'
         )
 
     @classmethod
@@ -64,7 +64,7 @@ class SplinkRunMetadata:
         clusters_count: int,
         records_count: dict[str, int],
         overlap_report: dict[str, int],
-    ) -> "SplinkRunMetadata":
+    ) -> 'SplinkRunMetadata':
         """
         Factory method to 'unpack' Splink objects into this metadata class.
         """
@@ -77,16 +77,16 @@ class SplinkRunMetadata:
             links_s3_path=links_s3_path,
             timestamp=datetime.now(timezone.utc).isoformat(),
             execution_context={
-                f"{SERVICE_NAME}_version": CODE_VERSION,
-                "python_version": sys.version.split()[0],
-                "splink_version": splink.__version__,
+                f'{SERVICE_NAME}_version': CODE_VERSION,
+                'python_version': sys.version.split()[0],
+                'splink_version': splink.__version__,
             },
-            inputs={"table_names": table_names, "per_source_records_count": records_count, "records_count": sum(records_count.values())},
-            outputs={"links_count": links_count, "clusters_count": clusters_count},
+            inputs={'table_names': table_names, 'per_source_records_count': records_count, 'records_count': sum(records_count.values())},
+            outputs={'links_count': links_count, 'clusters_count': clusters_count},
             model_metadata={
-                "splink_inference_predict_threshold": SPLINK_INFERENCE_PREDICT_THRESHOLD,
-                "splink_clustering_threshold": SPLINK_CLUSTERING_THRESHOLD,
-                "settings_hash": settings_hash,
+                'splink_inference_predict_threshold': SPLINK_INFERENCE_PREDICT_THRESHOLD,
+                'splink_clustering_threshold': SPLINK_CLUSTERING_THRESHOLD,
+                'settings_hash': settings_hash,
             },
             overlap_report=overlap_report,
         )
@@ -96,15 +96,15 @@ class SplinkRunMetadata:
 
     @property
     def linkage_rate(self) -> float:
-        total_in = self.inputs["records_count"]
+        total_in = self.inputs['records_count']
         if total_in == 0:
             return 0.0
-        return (total_in - self.outputs["clusters_count"]) / total_in
+        return (total_in - self.outputs['clusters_count']) / total_in
 
     @property
     def integrated_records_s3_path(self) -> float:
-        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"integrated_records{PARQUET_TABLE_SUFFIX}")
+        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f'integrated_records{PARQUET_TABLE_SUFFIX}')
 
     @property
     def deduplicated_records_s3_path(self) -> float:
-        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f"dedup_integrated_records{PARQUET_TABLE_SUFFIX}")
+        return os.path.join(ENTITY_RESOLUTION_DATA_FOLDER, self.run_id, f'dedup_integrated_records{PARQUET_TABLE_SUFFIX}')

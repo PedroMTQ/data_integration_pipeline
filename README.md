@@ -1,8 +1,8 @@
 
 # Overview
 
-This project constitutes a proof of concept (POC) for the some of the work I've been doing the past few years, in particular in data integration. It covers data ingestion, processing, entity resolution, and creation of gsold records.
-In general, it follows the medallion architecture, where raw (bronze) data is uploaed into S3 (Minio in this case), and downstream jobs are triggered (manually for now, but later via Airflow sensors).
+This project constitutes a proof of concept (POC) for some of the work I've been doing over the past few years, in particular in data integration. It covers data ingestion, processing, entity resolution, and creation of gold records.
+In general, it follows the medallion architecture, where raw (bronze) data is uploaded into S3 (Minio in this case), and downstream jobs are triggered (manually for now, but later via Airflow sensors).
 These tasks include:
 
 1. processing and archiving raw data (bronze) into validated data (silver)
@@ -11,9 +11,9 @@ These tasks include:
 4. performing entity resolution
 5. creating integrated data profiles
 6. deduplicating integrated data profiles
-7. create business-oriented records (gold)
+7. creating business-oriented records (gold)
 
-I used 3 types of **synthetic** data in this project, all of which have the typical errors: duplicated data, data typing issues, null values, etc. To note that all these dataset have some type of intersecting fields, some IDs, but we mostly depend on company names and geolocation as these are a very typical real-world scenario.  
+I used 3 types of **synthetic** data in this project, all of which have typical errors: duplicated data, data typing issues, null values, etc. All these datasets have some intersecting fields and some IDs, but we mostly depend on company names and geolocation as this is a very typical real-world scenario.  
 
 ## Context
 
@@ -74,22 +74,54 @@ Below you can find a few data points from each dataset.
 
 # Setup 
 
-Setup can be done via make commands:
+Setup can be done via make commands.
 
-- Start necessary Docker containers (Minio and Postgres) with:
-```
+- Start necessary Docker containers (Minio) with:
+```bash
 make infra_up
 ```
 
 - Stop Docker containers (Minio and Postgres) with:
-```
+```bash
 make infra_down
 ```
 
 - Check Docker containers status (Minio and Postgres) with:
-```
+```bash
 make infra_status
 ```
+
+
+## Local Python environment (recommended)
+
+This repo uses [`uv`](https://github.com/astral-sh/uv) to manage the Python environment.
+
+Install uv with :
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+- Create/update the environment:
+```bash
+make install
+```
+
+- Activate the environment (also sources `.env`):
+```bash
+make activate
+```
+
+- Run tests:
+```bash
+make test
+```
+
+- Format/lint:
+```bash
+make format
+```
+
 
 
 
@@ -98,15 +130,23 @@ make infra_status
 ![workflow](./images/workflow.drawio.png)
 
 
+You can run the full pipeline with:
+```bash
+dip pipeline
+```
+
+Although, **I'd suggest you run each step individually so you can better understand the workflow.**
+
+
 ## 1. Raw/bronze data ingestion
 
-Upload test data to S3 bucket `data` in `bronze` area:
+Upload test data to S3 bucket (default: `data`) in the `bronze` area:
 
-```
-python src/data_integration_pipeline/jobs/upload_bronze.py
+```bash
+dip upload-bronze
 ```
 
-This will upload all the files in `tests/data/` to Minio, e.g., `data/bronze/business_entity_registry/business_entity_registry.csv`
+This will upload all the files in `tests/data/` to Minio, e.g., `bronze/business_entity_registry/business_entity_registry.csv`
 
 ![upload_bronze](./images/upload_bronze.png)
 
@@ -117,8 +157,8 @@ I'm using MinIO as a local S3 storage, where I will host the data, including the
 
 Process bronze data S3 bucket `data` and write to S3 bucket `data` in `silver` folder:
 
-```
-python src/data_integration_pipeline/jobs/process_bronze_and_load_to_delta_silver.py
+```bash
+dip process-bronze
 ```
 
 Note that data is read and written into S3 directly without landing into a local folder. Depending on the requirements and workflow bottleneck, this could change, and we could first download to local, e.g., if we want to distribute a file into batches of data and process those in parallel. As with everything, it depends on the business context.
@@ -127,8 +167,8 @@ This will process all the data in the bronze layer, and write them to a per-data
 
 Note that: 
 
-- invalid rows are archived in `data/errors/processsing/`, e.g., `data/errors/processsing/business_entity_registry/errors.parquet` 
-- bronze/raw data is archive in `data/archive/`
+- invalid rows are archived in `errors/processing/`, e.g., `errors/processing/business_entity_registry/errors.parquet` 
+- bronze/raw data is archived in `archive/`
 
 
 Console output:
@@ -151,16 +191,18 @@ For example, below I changed one of the values of the raw data and after re-proc
 
 Run data auditing on the delta tables:
 
-```
-python src/data_integration_pipeline/jobs/audit_silver.py
+```bash
+dip audit-silver
 ```
 
 You can check the results by running:
-```
+```bash
 make audit_docs
 ```
 
 This will launch a local server exposing the HTML documents generated by [Great Expectations (GX)](https://greatexpectations.io/), which you can check by going [http://localhost:8080/](here)
+
+This will launch a local server exposing the HTML documents generated by [Great Expectations (GX)](https://greatexpectations.io/), which you can check by going [here](http://localhost:8080/).
 
 Below you can see how reports look in GX. Note that I've set fairly basic auditing, but you can see how easy to use it is, especially when you combine it with multiple data stages (e.g., raw->validated).
 
@@ -173,8 +215,8 @@ Below you can see how reports look in GX. Note that I've set fairly basic auditi
 
 Deduplicate silver data based on each of the data models' primary key:
 
-```
-python src/data_integration_pipeline/jobs/deduplicate_silver_data.py
+```bash
+dip dedup-silver
 ```
 
 In this step, the goal is to remove data duplicates, which are detected by detecting records with the same primary key (which depends on the underlying data source and respective data model). The elimitation of duplicates is based on the 1. whether the record is active (if info is available) and 2.0 the fill count of each flat record. We could also modify the data model to include a `global_score` based on other metrics. See `DuplicatesProcessor._deduplicate_silver` for more information. This step is "*optional*", but **recommended if the primary keys are strong indicators of data redundancy**.
@@ -197,13 +239,13 @@ Where one of them is removed:
 
 Run entity resolution via Splink with deduplication and linking on the `deduplicated.parquet` files. 
 
-```
-python src/data_integration_pipeline/jobs/run_entity_resolution.py
+```bash
+dip run-er
 ```
 
 This will assign each record to a cluster, which we process in the next step.
 
-Note that this step is at the moment quite rudimentary, since Splink depends on training/pre-trained expectation-maximization models, performing entity resolution with small small datasets is not quite feasible. For example, for the current data, we achived this overlap:
+Note that this step is at the moment quite rudimentary, since Splink depends on training/pre-trained expectation-maximization models, and performing entity resolution with small datasets is not quite feasible. For example, for the current data, we achieved this overlap:
 
 ```
 business_entity_registry: 100
@@ -222,7 +264,7 @@ Note that entity resolution can be run multiple times, where each run is associa
 Note that we store this information per run:
 - `model.json` represents the Splink model
 - `metadata.json` contains run metadata, e.g.,
-```
+```python
 {'run_id': '019cb3d0-c21a-7560-afca-9f5ecc0d36b1', 'links_s3_path': 'entity_resolution/019cb3d0-c21a-7560-afca-9f5ecc0d36b1/links.parquet', 'timestamp': '2026-03-03T13:08:49.692596+00:00', 'execution_context': {'data_integration_pipeline_version': '0.0.1', 'python_version': '3.11.14', 'splink_version': '4.0.15'}, 'inputs': {'table_names': ['business_entity_registry', 'licenses_registry', 'sub_contractors_registry'], 'per_source_records_count': {'business_entity_registry': 141, 'licenses_registry': 155, 'sub_contractors_registry': 136}, 'records_count': 432}, 'outputs': {'links_count': (432,), 'clusters_count': 387}, 'model_metadata': {'splink_inference_predict_threshold': 0.01, 'splink_clustering_threshold': 0.9, 'settings_hash': '5f2fc7d557f9c29f7cfcaccc7b102758'}, 'overlap_report': {'business_entity_registry': 99, 'business_entity_registry + licenses_registry': 33, 'business_entity_registry + licenses_registry + sub_contractors_registry': 3, 'business_entity_registry + sub_contractors_registry': 6, 'licenses_registry': 119, 'sub_contractors_registry': 127}}
 ```
 - `links.parquet` contains the actual links (i.e., clusters) found by Splink
@@ -241,8 +283,8 @@ Besides the aforementioned points, there are 2 things we could improve upon:
 
 Process Splink links:
 
-```
-python src/data_integration_pipeline/jobs/create_integrated_records.py
+```bash
+dip create-integrated
 ```
 
 
@@ -264,8 +306,8 @@ For more information check `src/data_integration_pipeline/core/entity_resolution
 
 After generating the integrated records, we run another deduplication step, where we deduplicate the records based on their primary key and data source. Here we the fields `is_active` and `global_score` (this score is generated in the integrated record pydantic data model) to rank duplicate records
 
-```
-python src/data_integration_pipeline/jobs/deduplicate_integrated_records.py
+```bash
+dip dedup-integrated
 ```
 
 ![deduplicate_integrated_records](./images/deduplicate_integrated_records.png)
@@ -275,8 +317,8 @@ python src/data_integration_pipeline/jobs/deduplicate_integrated_records.py
 
 The last step is to create the gold records which represent the entities which are consumed by downstream business-oriented stakeholders.
 
-```
-python src/data_integration_pipeline/jobs/create_gold_records.py
+```bash
+dip create-gold
 ```
 
 This is done by:
@@ -307,5 +349,6 @@ Minio:
 - add airflow sensors and respective orchestration. I've already started (see `dags`), but will need a few more days to wrap that up
 - Improve entity resolution : add better auditing for splink matches, model logging (Mlflow) and better Splink settings. This is the weakest point of this POC, but also natural due to the nature of the input data.
 - The IO objects don't have a well standardized protocol, so it ought to be improved. I'm using delta-scan in duckdb but then also have clients for each. This needs to be better standardized
-- Add more metrics, auditing, etc. At the moment we only really have logs, but this could be substantially improved. 
+- Add more metrics, auditing, etc. At the moment we only really have logs, but this could be substantially improved. I could also add a dashboard later.
 - The pydantic data models schema and data model is redundant for integrated and gold records, and we need a better way to handle it
+- Add parallelism, a good option would be to batch the data and let tasks run independently. This would pair very easily with airflow. During ingestion and processing it would be rather straightforward, however, before entity resolution, we would just need to make sure all tasks are finished so that we compile the full data for matching.

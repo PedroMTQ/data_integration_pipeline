@@ -10,9 +10,9 @@ from data_integration_pipeline.io.logger import logger
 class MappingsSingleton(SingletonBase):
     def __str__(self):
         # Check __dict__ to see if the property has been 'materialized'
-        if "_mapping" in self.__dict__:
-            return f"{self.__class__.__name__} - {len(self._mapping)} entries"
-        return f"{self.__class__.__name__} - Data not yet loaded)"
+        if '_mapping' in self.__dict__:
+            return f'{self.__class__.__name__} - {len(self._mapping)} entries'
+        return f'{self.__class__.__name__} - Data not yet loaded)'
 
     def get_label(self, code: str | None) -> str | None:
         """Safe lookup for your Pydantic computed fields."""
@@ -51,35 +51,35 @@ class NaicsMapping(MappingsSingleton):
     @cached_property
     def _mapping(self) -> dict:
         df = pl.read_csv(
-            os.path.join(SRC_DATA, "naics_mapping.csv"),
-            schema_overrides={"NAICS code": pl.String, "NAICS description": pl.String},
+            os.path.join(SRC_DATA, 'naics_mapping.csv'),
+            schema_overrides={'NAICS code': pl.String, 'NAICS description': pl.String},
         )
-        return dict(zip(df["NAICS code"], df["NAICS description"], strict=True))
+        return dict(zip(df['NAICS code'], df['NAICS description'], strict=True))
 
 
 class AddressAbbreviationMapping(MappingsSingleton):
     @cached_property
     def _mapping(self) -> dict:
         df = pl.read_csv(
-            os.path.join(SRC_DATA, "address_abbreviations_mapping.csv"),
-            schema_overrides={"abbreviation": pl.String, "term": pl.String},
+            os.path.join(SRC_DATA, 'address_abbreviations_mapping.csv'),
+            schema_overrides={'abbreviation': pl.String, 'term': pl.String},
         )
-        return dict(zip(df["abbreviation"], df["term"], strict=True))
+        return dict(zip(df['abbreviation'], df['term'], strict=True))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     naics_mapping = NaicsMapping()
-    print("1", id(naics_mapping), naics_mapping)
-    print(naics_mapping.get_label("561611"))
-    print("2", id(naics_mapping), naics_mapping)
+    print('1', id(naics_mapping), naics_mapping)
+    print(naics_mapping.get_label('561611'))
+    print('2', id(naics_mapping), naics_mapping)
     naics_mapping = NaicsMapping()
-    print("3", id(naics_mapping), naics_mapping)
-    print("code lookup", naics_mapping.get_code("Structural Stel and precast Concryt Contractors"))
+    print('3', id(naics_mapping), naics_mapping)
+    print('code lookup', naics_mapping.get_code('Structural Stel and precast Concryt Contractors'))
 
     address_abbreviation_mapping = AddressAbbreviationMapping()
-    print("1", id(address_abbreviation_mapping), address_abbreviation_mapping)
-    print(address_abbreviation_mapping.get_label("ALY"))
-    print("2", id(address_abbreviation_mapping), address_abbreviation_mapping)
+    print('1', id(address_abbreviation_mapping), address_abbreviation_mapping)
+    print(address_abbreviation_mapping.get_label('ALY'))
+    print('2', id(address_abbreviation_mapping), address_abbreviation_mapping)
     address_abbreviation_mapping = AddressAbbreviationMapping()
-    print("3", id(address_abbreviation_mapping), address_abbreviation_mapping)
-    print("code lookup", address_abbreviation_mapping.get_code("Alley"))
+    print('3', id(address_abbreviation_mapping), address_abbreviation_mapping)
+    print('code lookup', address_abbreviation_mapping.get_code('Alley'))

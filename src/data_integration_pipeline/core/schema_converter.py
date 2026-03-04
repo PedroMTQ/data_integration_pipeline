@@ -12,8 +12,8 @@ from pydantic import AwareDatetime, BaseModel, NaiveDatetime
 from typing_extensions import Annotated, get_args, get_origin
 
 
-BaseModelType = TypeVar("BaseModelType", bound=BaseModel)
-EnumType = TypeVar("EnumType", bound=EnumMeta)
+BaseModelType = TypeVar('BaseModelType', bound=BaseModel)
+EnumType = TypeVar('EnumType', bound=EnumMeta)
 
 
 class SchemaCreationError(Exception):
@@ -36,8 +36,8 @@ FIELD_MAP = {
     # dict: pa.string(),  # Store as JSON string for easier auditing
     # list: pa.list_(pa.string()),
     datetime.date: pa.date32(),
-    NaiveDatetime: pa.timestamp("ms", tz=None),
-    datetime.time: pa.time64("us"),
+    NaiveDatetime: pa.timestamp('ms', tz=None),
+    datetime.time: pa.time64('us'),
 }
 
 # Timezone aware datetimes will lose their timezone information
@@ -45,8 +45,8 @@ FIELD_MAP = {
 # Pyarrow does support having an entire column in a single timezone,
 # but these bare types cannot guarantee that.
 LOSING_TZ_TYPES = {
-    datetime.datetime: pa.timestamp("ms", tz=None),
-    AwareDatetime: pa.timestamp("ms", tz=None),
+    datetime.datetime: pa.timestamp('ms', tz=None),
+    AwareDatetime: pa.timestamp('ms', tz=None),
 }
 
 
@@ -55,11 +55,11 @@ def _get_int_type(metadata: List[Any]) -> pa.DataType:
     for el in metadata:
         if isinstance(el, Gt):
             if el.gt is not None and not isinstance(el.gt, int):
-                raise SchemaCreationError("Gt metadata must be int")
+                raise SchemaCreationError('Gt metadata must be int')
             min_value = el.gt
         elif isinstance(el, Ge):
             if el.ge is not None and not isinstance(el.ge, int):
-                raise SchemaCreationError("Ge metadata must be int")
+                raise SchemaCreationError('Ge metadata must be int')
             min_value = el.ge
 
     if min_value is not None and min_value >= 0:
@@ -70,10 +70,10 @@ def _get_int_type(metadata: List[Any]) -> pa.DataType:
 def _get_decimal_type(metadata: List[Any]) -> pa.DataType:
     general_metadata = None
     for el in metadata:
-        if hasattr(el, "max_digits") and hasattr(el, "decimal_places"):
+        if hasattr(el, 'max_digits') and hasattr(el, 'decimal_places'):
             general_metadata = el
     if general_metadata is None:
-        raise SchemaCreationError("Decimal type needs annotation setting max_digits and decimal_places")
+        raise SchemaCreationError('Decimal type needs annotation setting max_digits and decimal_places')
 
     return pa.decimal128(general_metadata.max_digits, general_metadata.decimal_places)
 
@@ -97,7 +97,7 @@ def _get_literal_type(
         # written into parquet.
         return pa.int64()
     else:
-        msg = "Literal type is only supported with all int or string values. "
+        msg = 'Literal type is only supported with all int or string values. '
         raise SchemaCreationError(msg)
 
 
@@ -120,7 +120,7 @@ def _get_annotated_type(
 ) -> pa.DataType:
     # TODO: fix / clean up / understand why / if this works in all cases
     args = get_args(field_type)[1:]
-    metadatas = [item.metadata if hasattr(item, "metadata") else [item] for item in args]
+    metadatas = [item.metadata if hasattr(item, 'metadata') else [item] for item in args]
     metadata = [item for sublist in metadatas for item in sublist]
     field_type = cast(Type[Any], get_args(field_type)[0])
     return _get_pyarrow_type(field_type, metadata, settings)
@@ -155,14 +155,14 @@ def _get_enum_type(field_type: Type[Any]) -> pa.DataType:
     if all(is_int):
         return pa.int64()
 
-    msg = "Enums only allowed if all str or all int"
+    msg = 'Enums only allowed if all str or all int'
     raise SchemaCreationError(msg)
 
 
 def _is_optional(field_type: Type[Any]) -> bool:
     origin = get_origin(field_type)
     is_python_39_union = origin is Union
-    is_python_310_union = hasattr(types, "UnionType") and origin is types.UnionType
+    is_python_310_union = hasattr(types, 'UnionType') and origin is types.UnionType
 
     if not is_python_39_union and not is_python_310_union:
         return False
@@ -178,7 +178,7 @@ def _get_pyarrow_type(  # noqa: PLR0911
     settings: Settings,
 ) -> pa.DataType:
     origin = get_origin(field_type)
-    if origin is Union or (hasattr(types, "UnionType") and isinstance(field_type, types.UnionType)):
+    if origin is Union or (hasattr(types, 'UnionType') and isinstance(field_type, types.UnionType)):
         # Extract the non-None type
         args = get_args(field_type)
         field_type = next((arg for arg in args if arg is not type(None)), field_type)
@@ -193,7 +193,7 @@ def _get_pyarrow_type(  # noqa: PLR0911
         return LOSING_TZ_TYPES[field_type]
 
     if not settings.allow_losing_tz and field_type in LOSING_TZ_TYPES:
-        raise SchemaCreationError(f"{field_type} only allowed if ok losing timezone information")
+        raise SchemaCreationError(f'{field_type} only allowed if ok losing timezone information')
 
     if isinstance(field_type, EnumMeta):
         return _get_enum_type(field_type)
@@ -213,7 +213,7 @@ def _get_pyarrow_type(  # noqa: PLR0911
     if isinstance(field_type, type) and issubclass(field_type, BaseModel):
         return _get_pyarrow_schema(field_type, settings, as_schema=False)
 
-    raise SchemaCreationError(f"Unknown type: {field_type}")
+    raise SchemaCreationError(f'Unknown type: {field_type}')
 
 
 def _get_pyarrow_schema(
@@ -230,7 +230,7 @@ def _get_pyarrow_schema(
 
         if field_type is None:
             # Not sure how to get here through pydantic, hence nocover
-            raise SchemaCreationError(f"Missing type for field {name}")  # pragma: no cover
+            raise SchemaCreationError(f'Missing type for field {name}')  # pragma: no cover
 
         try:
             nullable = False
@@ -242,7 +242,7 @@ def _get_pyarrow_schema(
 
             pa_field = _get_pyarrow_type(field_type, metadata, settings)
         except Exception as err:  # noqa: BLE001 - ignore blind exception
-            raise SchemaCreationError(f"Error processing field {name}: {field_type}, {err}") from err
+            raise SchemaCreationError(f'Error processing field {name}: {field_type}, {err}') from err
 
         serialized_name = name
         if settings.by_alias and field_info.serialization_alias is not None:
@@ -287,10 +287,10 @@ class PyarrowSchemaGenerator:
         return _get_pyarrow_schema(self.data_model, settings)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     from data_integration_pipeline.core.data_processing.model_mapper import ModelMapper
 
-    s3_path = "silver/business_entity_registry/business_entity_registry.parquet"
+    s3_path = 'silver/business_entity_registry/business_entity_registry.parquet'
     data_model = ModelMapper.get_data_model(s3_path)
 
     pyarrow_schema = PyarrowSchemaGenerator(data_model.schema).run()

@@ -11,7 +11,7 @@ import re
 class AddressStandardizer(SingletonBase):
     def __init__(self):
         self.mapper = AddressAbbreviationMapping()
-        self.word_pattern = re.compile(r"([^,.\s#]+)(.*)")
+        self.word_pattern = re.compile(r'([^,.\s#]+)(.*)')
 
     def replace_abbreviations(self, address: str) -> str:
         if not address:
@@ -24,12 +24,12 @@ class AddressStandardizer(SingletonBase):
                 word, punctuation = match.groups()
                 expanded = self.mapper.get_label(word)
                 if expanded:
-                    standardized_tokens.append(f"{expanded}{punctuation}")
+                    standardized_tokens.append(f'{expanded}{punctuation}')
                 else:
                     standardized_tokens.append(token)
             else:
                 standardized_tokens.append(token)
-        return " ".join(standardized_tokens)
+        return ' '.join(standardized_tokens)
 
 
 @dataclass
@@ -48,24 +48,24 @@ class ParsedLocation:
                 setattr(self, field_name, field_value.upper().strip())
 
     @classmethod
-    def from_scourgify(cls, data: dict) -> "ParsedLocation":
+    def from_scourgify(cls, data: dict) -> 'ParsedLocation':
         return cls(
-            address_1=AddressStandardizer().replace_abbreviations(data.get("address_line_1")),
-            address_2=data.get("address_line_2"),
-            postal_code=data.get("postal_code"),
-            city=data.get("city"),
-            state=data.get("state"),
+            address_1=AddressStandardizer().replace_abbreviations(data.get('address_line_1')),
+            address_2=data.get('address_line_2'),
+            postal_code=data.get('postal_code'),
+            city=data.get('city'),
+            state=data.get('state'),
         )
 
 
 class LocationParser(SingletonBase):
-    def __init__(self, parser: Literal["scourgify"] = "scourgify"):
-        if hasattr(self, "parser_type"):
-            logger.debug(f"{self.__class__.__name__} singleton already initialized, skipping object creation...")
+    def __init__(self, parser: Literal['scourgify'] = 'scourgify'):
+        if hasattr(self, 'parser_type'):
+            logger.debug(f'{self.__class__.__name__} singleton already initialized, skipping object creation...')
             return
         self.parser_type = parser
         # You'd probably add better parsers here, there are many trained models for this nowadays, but this is pretty lightweight for a POC
-        if self.parser_type == "scourgify":
+        if self.parser_type == 'scourgify':
             self.parser = LocationParser.parser_scourgify
 
     @staticmethod
@@ -80,19 +80,19 @@ class LocationParser(SingletonBase):
             return ParsedLocation()
 
 
-if __name__ == "__main__":
-    test_address = "124 POWER AVE, SUITE B, alaska"
+if __name__ == '__main__':
+    test_address = '124 POWER AVE, SUITE B, alaska'
     parser = LocationParser()
     parsed_address = parser.parse(test_address)
     parsed_address = parser.parse(test_address)
     parsed_address = parser.parse(test_address)
     print(parsed_address)
-    print("1", id(parser), parser.parser_type)
-    parser = LocationParser(parser="test")
-    print("2", id(parser), parser.parser_type)
+    print('1', id(parser), parser.parser_type)
+    parser = LocationParser(parser='test')
+    print('2', id(parser), parser.parser_type)
 
     standardizer = AddressStandardizer()
-    test_address = "124 POWER AVE, SUITE B, alaska"
+    test_address = '124 POWER AVE, SUITE B, alaska'
     print(standardizer.replace_abbreviations(test_address))
-    test_address = "46132"
+    test_address = '46132'
     print(standardizer.replace_abbreviations(test_address))

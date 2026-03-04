@@ -27,8 +27,8 @@ from data_integration_pipeline.core.data_processing.features_extraction.location
 
 class SchemaRecord(BaseSchema):
     entity_id: str
-    company_name: str = Field(validation_alias=AliasPath("company_name", "company_name"))
-    company_name_normalized: Optional[str] = Field(default=None, validation_alias=AliasPath("company_name", "company_name_normalized"))
+    company_name: str = Field(validation_alias=AliasPath('company_name', 'company_name'))
+    company_name_normalized: Optional[str] = Field(default=None, validation_alias=AliasPath('company_name', 'company_name_normalized'))
     address_1: Optional[str]
     postal_code: Optional[str]
     city: Optional[str]
@@ -36,29 +36,29 @@ class SchemaRecord(BaseSchema):
 
 
 class ModelCompanyName(BaseModelCompanyName):
-    company_name: str = Field(alias="Official Business Name", description="Entity name")
+    company_name: str = Field(alias='Official Business Name', description='Entity name')
 
 
 class Record(BaseRecord):
     _record_schema: ClassVar[BaseSchema] = SchemaRecord
-    _data_source: ClassVar[str] = "business_entity_registry"
-    _primary_key: ClassVar[str] = "entity_id"
-    _partition_key: ClassVar[str] = "city"
+    _data_source: ClassVar[str] = 'business_entity_registry'
+    _primary_key: ClassVar[str] = 'entity_id'
+    _partition_key: ClassVar[str] = 'city'
 
-    entity_id: str = Field(alias="Entity UEI", description="Entity UEI")
+    entity_id: str = Field(alias='Entity UEI', description='Entity UEI')
     company_name: ModelCompanyName
-    address_1: SoftStr = Field(default=None, alias="Address Line 1")
-    postal_code: Optional[str] = Field(default=None, alias="Zip Code")
-    city: SoftStr = Field(default=None, alias="City Name")
-    entity_status: Optional[str] = Field(default=None, alias="Registration Status", description="Entity status", exclude=True)
-    is_active: bool = Field(default=None, description="Entity is active/inactive")
+    address_1: SoftStr = Field(default=None, alias='Address Line 1')
+    postal_code: Optional[str] = Field(default=None, alias='Zip Code')
+    city: SoftStr = Field(default=None, alias='City Name')
+    entity_status: Optional[str] = Field(default=None, alias='Registration Status', description='Entity status', exclude=True)
+    is_active: bool = Field(default=None, description='Entity is active/inactive')
 
-    @field_validator("entity_id")
+    @field_validator('entity_id')
     @classmethod
     def format_id(cls, value: str | None) -> str | None:
         return normalize_id(value)
 
-    @field_validator("address_1")
+    @field_validator('address_1')
     @classmethod
     def clean_address_1(cls, value: str | None) -> str | None:
         address_parser = LocationParser()
@@ -67,14 +67,14 @@ class Record(BaseRecord):
             value = AddressStandardizer().replace_abbreviations(parsed_location.address_1)
         return value
 
-    @field_validator("city", "address_1", "postal_code")
+    @field_validator('city', 'address_1', 'postal_code')
     @classmethod
     def format_location(cls, value: str | None) -> str | None:
         if isinstance(value, str):
             return value.upper().strip()
         return value
 
-    @model_validator(mode="before")
+    @model_validator(mode='before')
     @classmethod
     def distribute_flat_data(cls, data: Any) -> Any:
         """
@@ -83,36 +83,36 @@ class Record(BaseRecord):
         because they have extra='ignore'.
         """
         if not isinstance(data, dict):
-            raise Exception(f"Bad data type: {data}")
-        data = {k: v if v != "" else None for k, v in data.items()}
-        data["company_name"] = ModelCompanyName(**data)
+            raise Exception(f'Bad data type: {data}')
+        data = {k: v if v != '' else None for k, v in data.items()}
+        data['company_name'] = ModelCompanyName(**data)
         return data
 
-    @model_validator(mode="after")
-    def set_active_status(self) -> "Record":
+    @model_validator(mode='after')
+    def set_active_status(self) -> 'Record':
         # If is_active wasn't provided in the input, calculate it
         if self.is_active is None:
-            self.is_active = self.entity_status == "ACT"
+            self.is_active = self.entity_status == 'ACT'
         return self
 
-    @model_serializer(mode="plain")
+    @model_serializer(mode='plain')
     def serialize_model(self):
         return {
-            "data_source": self._data_source,
-            "entity_id": self.entity_id,
+            'data_source': self._data_source,
+            'entity_id': self.entity_id,
             **self.company_name.model_dump(),
-            "address_1": self.address_1,
-            "postal_code": self.postal_code,
-            "city": self.city,
-            "is_active": self.is_active,
+            'address_1': self.address_1,
+            'postal_code': self.postal_code,
+            'city': self.city,
+            'is_active': self.is_active,
         }
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     from data_integration_pipeline.settings import TESTS_DATA
     from csv import DictReader
 
-    file_path = os.path.join(TESTS_DATA, "business_entity_registry.csv")
+    file_path = os.path.join(TESTS_DATA, 'business_entity_registry.csv')
     with open(file_path) as csvfile:
         reader = DictReader(csvfile)
         for row in reader:

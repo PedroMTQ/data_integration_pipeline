@@ -73,9 +73,9 @@ class S3WeightedParquetSampler:
         cleaned = {}
         for k, w in weights.items():
             if w < 0:
-                raise ValueError(f"Weight for {k} must be non-negative.")
+                raise ValueError(f'Weight for {k} must be non-negative.')
             if w > self.MAX_WEIGHT:
-                logger.warning(f"Capping weight {w} for {k} to {self.MAX_WEIGHT}")
+                logger.warning(f'Capping weight {w} for {k} to {self.MAX_WEIGHT}')
                 w = self.MAX_WEIGHT
             cleaned[k] = w
         return cleaned
@@ -91,12 +91,12 @@ class S3WeightedParquetSampler:
             self.raw_counts_list.append(batch_counts)
 
             df = df.with_columns(
-                [pl.col(self.weight_column).replace_strict(self.weights, default=self.default_weight).cast(pl.Float64).alias("_weight")]
-            ).filter(pl.col("_weight") > 0)
+                [pl.col(self.weight_column).replace_strict(self.weights, default=self.default_weight).cast(pl.Float64).alias('_weight')]
+            ).filter(pl.col('_weight') > 0)
             if df.is_empty():
                 continue
             num_valid = len(df)
-            scores = np.random.rand(num_valid) ** (1.0 / df["_weight"].to_numpy())
+            scores = np.random.rand(num_valid) ** (1.0 / df['_weight'].to_numpy())
             keys = df[self.primary_key].to_list()
             vals = df[self.weight_column].to_list()
             for i in range(num_valid):
@@ -127,7 +127,7 @@ class S3WeightedParquetSampler:
             self._sample_from_s3()
         dist = {}
         for _, _, _, val in self.heap:
-            key = str(val) if val is not None else "None"
+            key = str(val) if val is not None else 'None'
             dist[key] = dist.get(key, 0) + 1
         return dict(sorted(dist.items(), key=lambda x: x[1], reverse=True))
 
@@ -147,7 +147,7 @@ class S3WeightedParquetSampler:
         combined_df = pl.concat(self.raw_counts_list)
 
         # 2. Final aggregation: Group by the value and sum the 'count' column
-        final_dist_df = combined_df.group_by(self.weight_column).agg(pl.col("count").sum()).sort("count", descending=True)
+        final_dist_df = combined_df.group_by(self.weight_column).agg(pl.col('count').sum()).sort('count', descending=True)
 
         # 3. Convert to dictionary efficiently
         # iter_rows() on two columns returns (value, count) tuples
@@ -167,33 +167,33 @@ class S3WeightedParquetSampler:
 
     def get_filtered_data(self, columns_filter: list[str], *args, **kwargs) -> Iterable[pa.Table]:
         if columns_filter:
-            logger.debug(f"Columns filter: {columns_filter}")
+            logger.debug(f'Columns filter: {columns_filter}')
         arrow_table: pa.Table
         for arrow_table in self.get_data(*args, **kwargs):
             if columns_filter:
-                logger.debug(f"Table size before filtering: {arrow_table.shape}")
+                logger.debug(f'Table size before filtering: {arrow_table.shape}')
                 arrow_table = arrow_table.select(columns_filter)
-                logger.debug(f"Table size after filtering: {arrow_table.shape}")
+                logger.debug(f'Table size after filtering: {arrow_table.shape}')
             yield arrow_table
 
 
-if __name__ == "__main__":
-    s3_path = "silver/business_entity_registry/business_entity_registry.delta"
+if __name__ == '__main__':
+    s3_path = 'silver/business_entity_registry/business_entity_registry.delta'
 
     s3_sampler = S3WeightedParquetSampler(
         s3_path=s3_path,
-        weight_column="city",
-        weights={"NEW YORK": 50.0},
+        weight_column='city',
+        weights={'NEW YORK': 50.0},
         default_weight=1,
         target_total_rows=10,
     )
 
     # Consume the generator to trigger the sampling
-    print("get_total_raw_records", s3_sampler.get_total_raw_records())
-    print("get_raw_data_distribution", s3_sampler.get_raw_data_distribution())
-    print("get_total_sampled_records", s3_sampler.get_total_sampled_records())
-    print("get_sample_data_distribution", s3_sampler.get_sample_data_distribution())
+    print('get_total_raw_records', s3_sampler.get_total_raw_records())
+    print('get_raw_data_distribution', s3_sampler.get_raw_data_distribution())
+    print('get_total_sampled_records', s3_sampler.get_total_sampled_records())
+    print('get_sample_data_distribution', s3_sampler.get_sample_data_distribution())
     for i in s3_sampler.get_data():
         print(i)
-    for i in s3_sampler.get_filtered_data(columns_filter=["city", "company_name"]):
+    for i in s3_sampler.get_filtered_data(columns_filter=['city', 'company_name']):
         print(i)

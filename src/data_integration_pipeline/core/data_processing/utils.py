@@ -18,7 +18,7 @@ def empty_non_valid(value: Any, handler: ValidatorFunctionWrapHandler, info: Val
     try:
         return handler(value)
     except (ValidationError, ValueError) as e:
-        logger.warning(f"Emptying {info.field_name}:{value} since it has a validation error: {e}")
+        logger.warning(f'Emptying {info.field_name}:{value} since it has a validation error: {e}')
         return handler(None)
 
 

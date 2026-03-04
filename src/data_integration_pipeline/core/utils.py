@@ -15,7 +15,7 @@ def batch_yielder(initial_yielder: Iterable[Any], batch_size: int) -> Iterable[l
         yield chunk
 
 
-def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"]) -> SplinkRunMetadata:
+def get_latest_metadata_by_table_group(metadata_list: list['SplinkRunMetadata']) -> SplinkRunMetadata:
     """
     Groups runs by their input table combinations and returns only
     the most recent SplinkRunMetadata object for each group.
@@ -23,8 +23,8 @@ def get_latest_metadata_by_table_group(metadata_list: list["SplinkRunMetadata"])
     latest_runs: dict[str, SplinkRunMetadata] = {}
     for entry in metadata_list:
         # 1. Access attributes directly from the object
-        tables = entry.inputs.get("table_names", [])
-        table_group = ",".join(sorted(tables))
+        tables = entry.inputs.get('table_names', [])
+        table_group = ','.join(sorted(tables))
         # 2. Parse the timestamp string into a datetime for comparison
         # We assume entry.timestamp is an ISO format string
         current_ts = datetime.fromisoformat(entry.timestamp)

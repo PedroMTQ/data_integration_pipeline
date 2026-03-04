@@ -49,26 +49,24 @@ class DeltaClient:
             dt = DeltaTable(uri, storage_options=self.storage_options)
             return dt.version()
         except Exception as e:
-            print(f"Error reading changes for {table_name} due to {e}")
+            print(f'Error reading changes for {table_name} due to {e}')
             return 0
 
     def get_data_history(self, table_name: str):
         uri = self._get_uri(table_name)
         try:
             dt = DeltaTable(uri, storage_options=self.storage_options)
-            current_version = dt.version()
-            print("current table version", current_version)
             table = dt.load_cdf(starting_version=1, ending_version=dt.version()).read_all()
             pt = pl.from_arrow(table)
-            print(pt.sort("_commit_version", descending=True))
+            print(pt.sort('_commit_version', descending=True))
         except Exception as e:
-            print(f"Error reading changes for {table_name} due to {e}")
-            raise e
+            print(f'Error reading changes for {table_name} due to {e}')
+            raise
 
     @staticmethod
     def __prepare_data(data: pa.Table, primary_key: Union[str, Iterable], partition_key: str) -> pa.Table:
         if not primary_key:
-            raise Exception("Missing primary_key")
+            raise Exception('Missing primary_key')
         now = datetime.now(timezone.utc)
         df = pl.from_arrow(data)
         if partition_key:
@@ -103,13 +101,13 @@ class DeltaClient:
         write_deltalake(
             uri,
             data=data,
-            mode="overwrite",
+            mode='overwrite',
             partition_by=[partition_key] if partition_key else None,
             storage_options=self.storage_options,
             # schema_mode="overwrite" allows schema evolution if the integrated record model changes
-            schema_mode="overwrite",
+            schema_mode='overwrite',
         )
-        logger.info(f"Overwrote table {s3_path} with {len(data)} integrated records.")
+        logger.info(f'Overwrote table {s3_path} with {len(data)} integrated records.')
 
     def write(
         self, s3_path: str, data: pa.Table, primary_key: Union[str, Iterable] = None, partition_key: str = None, add_metadata_columns: bool = True
@@ -127,32 +125,31 @@ class DeltaClient:
                 partition_by=[partition_key] if partition_key else None,
                 storage_options=self.storage_options,
             )
-            logger.info(f"Initialized new table {s3_path} with {len(data)} records.")
+            logger.info(f'Initialized new table {s3_path} with {len(data)} records.')
             return
         dt = DeltaTable(uri, storage_options=self.storage_options)
-        mapping = {col: f"source.{col}" for col in data.schema.names if col != primary_key}
-        # TODO we need to allow a list of primary keys
+        mapping = {col: f'source.{col}' for col in data.schema.names if col != primary_key}
         if isinstance(primary_key, str):
-            base_predicate = f"target.{primary_key} = source.{primary_key}"
+            base_predicate = f'target.{primary_key} = source.{primary_key}'
         elif isinstance(primary_key, Iterable):
             base_predicate = []
             for k in primary_key:
-                base_predicate.append(f"target.{k} = source.{k}")
-            base_predicate = " AND ".join(base_predicate)
+                base_predicate.append(f'target.{k} = source.{k}')
+            base_predicate = ' AND '.join(base_predicate)
 
         if partition_key:
-            base_predicate += f" AND target.{partition_key} = source.{partition_key}"
+            base_predicate += f' AND target.{partition_key} = source.{partition_key}'
         (
-            dt.merge(source=data, predicate=base_predicate, source_alias="source", target_alias="target")
+            dt.merge(source=data, predicate=base_predicate, source_alias='source', target_alias='target')
             .when_matched_update(
                 updates=mapping,
                 # This ensures we don't write a new version if the data is identical
-                predicate=f"target.{HASH_DIFF_COLUMN} != source.{HASH_DIFF_COLUMN}",
+                predicate=f'target.{HASH_DIFF_COLUMN} != source.{HASH_DIFF_COLUMN}',
             )
             .when_not_matched_insert_all()
             .execute()
         )
-        logger.info(f"Upserted batch into {s3_path}.")
+        logger.info(f'Upserted batch into {s3_path}.')
 
     def read(
         self, table_path: str, columns: list = None, keys: list = None, key_column: str = None, version: Union[int, datetime] = None
@@ -182,23 +179,27 @@ class DeltaClient:
     def rollback(self, table_name: str, version: int = None, timestamp: datetime = None):
         """Restores table to a previous state using Delta Time Travel."""
         if version is None and timestamp is None:
-            raise Exception("Missing version and timestamp")
+            raise Exception('Missing version and timestamp')
         uri = self._get_uri(table_name)
         dt = DeltaTable(uri, storage_options=self.storage_options)
         if version is not None:
             dt.restore(version)
         elif timestamp is not None:
             dt.restore(timestamp)
-        logger.info(f"Rolled back DeltaTable {DELTA_TABLE_URI} to {version or timestamp}")
+        logger.info(f'Rolled back DeltaTable {DELTA_TABLE_URI} to {version or timestamp}')
+
+    def read_table(self, table_name) -> pl.DataFrame:
+        # this is generally never used, mostly just for debugging purposes
+        return pl.from_arrow(pa.Table.from_batches(self.read(table_name)))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     client = DeltaClient()
     # data = client.read(
     #     table_path="data_mart/gold_business_entity/gold_business_entity.delta",
     # )
     # print(pa.Table.from_batches(data).shape)
-    table_path = "silver/business_entity_registry/records.delta"
+    table_path = 'silver/business_entity_registry/records.delta'
     data = client.read(
         table_path=table_path,
     )
