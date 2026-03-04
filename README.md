@@ -15,6 +15,21 @@ These tasks include:
 
 I used 3 types of **synthetic** data in this project, all of which have typical errors: duplicated data, data typing issues, null values, etc. All these datasets have some intersecting fields and some IDs, but we mostly depend on company names and geolocation as this is a very typical real-world scenario.  
 
+- [Overview](#overview)
+    - [Context](#context)
+    - [Data schema](#data-schema)
+- [Setup](#setup)
+- [Workflow](#data-integration-worfklow)
+    1. [Raw/bronze data ingestion](#1-rawbronze-data-ingestion)
+    2. [Raw data processing](#2-raw-data-processing)
+    3. [Delta tables auditing](#3-delta-tables-auditing)
+    4. [Silver data deduplication](#4-silver-data-deduplication)
+    5. [Entity resolution - deduplication and linking](#5-entity-resolution---deduplication-and-linking)
+    6. [Entity resolution result processing](#6-entity-resolution-result-processing)
+    7. [Integrated records deduplication](#7-integrated-records-deduplication)
+    8. [Business-layer/gold records generation](#8-business-layergold-records-generation)
+-   [Future TODO](#todo)
+
 ## Context
 
 The organization operates with a centralized Federal Business Registry which serves as the legal source of truth. However, due to administrative latency, the Federal Business Registry often lags behind real-world changes. To compensate, data is ingested from two specialized departmental registries: the Sub-contractor Registry  and the Sector-Specific Licensing Registry .
@@ -92,7 +107,7 @@ make infra_status
 ```
 
 
-## Local Python environment (recommended)
+## Local Python environment
 
 This repo uses [`uv`](https://github.com/astral-sh/uv) to manage the Python environment.
 
