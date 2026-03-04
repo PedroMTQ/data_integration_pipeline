@@ -18,6 +18,7 @@ I used 3 types of **synthetic** data in this project, all of which have typical 
 - [Overview](#overview)
     - [Context](#context)
     - [Data schema](#data-schema)
+    - [Core technologies & methodologies](#core-technologies--methodologies)
 - [Setup](#setup)
 - [Workflow](#data-integration-worfklow)
     1. [Raw/bronze data ingestion](#1-rawbronze-data-ingestion)
@@ -84,7 +85,39 @@ Below you can find a few data points from each dataset.
 |MIA-6603 |Coastal Concrete            |                  |DBE               |Foundations, Paving|
 
 
+### Core technologies & methodologies
 
+#### Data Processing & Storage
+- PyArrow: Data serialization and in-memory processing
+- Delta Lake: Versioned data storage with ACID transactions
+- DuckDB: SQL query engine for analytical processing
+- Polars: DataFrame operations for ETL
+- Boto3/S3FS: S3 object storage interactions
+
+#### Data Quality & Auditing
+- Pydantic: Data model validation and schema enforcement
+- Great Expectations: Data quality auditing and reporting
+
+#### Entity Resolution
+- Splink: Probabilistic entity resolution and deduplication
+- RapidFuzz: Fuzzy string matching for record comparison
+
+#### Data enrichment and features extraction
+- CleanCo: Company name standardization
+- USAddress/Scourgify: Address parsing and normalization
+-  DateParser: Date field normalization
+
+#### Orchestration & DevOps
+- Docker: Containerization for local development
+- MinIO: Local S3-compatible storage for testing
+- Airflow: Orchestration framework (not fully implemented)
+- UV: Python environment management
+- Ruff: Code formatting and linting
+
+#### Project Logic & Integration
+- Medallion Architecture: The organizational framework (Bronze/Silver/Gold) for data refinement.
+- Survivorship Rules: Custom logic (implemented in IntegratedRecord) to select the best data points from clustered records.
+- ID Bridge Table: A mapping strategy used to maintain lineage between transient entity clusters and their source systems.
 
 
 # Setup 
