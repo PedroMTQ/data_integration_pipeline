@@ -33,14 +33,14 @@ I used 3 types of **synthetic** data in this project, all of which have typical 
 
 ## Context
 
-The organization operates with a centralized Federal Business Registry which serves as the legal source of truth. However, due to administrative latency, the Federal Business Registry often lags behind real-world changes. To compensate, data is ingested from two specialized departmental registries: the Sub-contractor Registry  and the Sector-Specific Licensing Registry .
+The organization operates with a centralized Federal Business Registry which serves as the legal source of truth. However, due to administrative latency, the Federal Business Registry often lags behind real-world changes. To compensate, data is ingested from two specialized departmental registries: the Sub-contractor Registry and the sector-specific Licensing Registry .
 
 
 |Registry                       |Authority Level|Update Frequency|Primary Data Focus                                              |
 |-------------------------------|---------------|----------------|----------------------------------------------------------------|
 |Federal Business Registry |Primary (Legal)|Quarterly       |Legal entity names, tax IDs, registered addresses.              |
-|Sub-contractor Registry   |Secondary      |Weekly          |Operational status, current project sites, insurance validity.  |
-|Licensing Registry        |Tertiary       |On-demand       |Professional certifications, safety ratings, compliance history.|
+|Licensing Registry        |Tertiary       |On-demand       |Professional certifications, operations sector, registerd address, compliance history.|
+|Sub-contractor Registry   |Secondary      |Weekly          |Entity name, internal vendor ID, tax ID, certification type, and trade specialties  |
 
 
 ### Data schema
@@ -48,7 +48,7 @@ The organization operates with a centralized Federal Business Registry which ser
 Below you can find a few data points from each dataset.
 
 
-##### Businesss registry
+##### Federal business entity registry
 
 |Entity UEI|Official Business Name      |Address Line 1    |City Name|Zip Code|Registration Status|
 |----------|----------------------------|------------------|---------|--------|-------------------|
@@ -200,6 +200,8 @@ This will upload all the files in `tests/data/` to Minio, e.g., `bronze/business
 
 I'm using MinIO as a local S3 storage, where I will host the data, including the raw csv files and all downstream generated delta tables and parquet files. 
 
+*When I integrate Airflow sensors, this step will be the initial trigger of all downstream tasks*
+
 
 ## 2. Raw data processing
 
@@ -215,9 +217,10 @@ This will process all the data in the bronze layer, and write them to a per-data
 
 Note that: 
 
-- invalid rows are archived in `errors/processing/`, e.g., `errors/processing/business_entity_registry/errors.parquet` 
+- invalid rows are archived in `errors/processing/`, e.g., `errors/processing/business_entity_registry/errors.parquet`
 - bronze/raw data is archived in `archive/`
 
+Ideally, these errors would be reported (if above a certain threshold) and either reprocessed (e.g., by adapting the pydantic data models) or "trashed" if we are confident that the data is incorrect.
 
 Console output:
 ![process_bronze_and_load_to_delta_silver](./images/process_bronze_and_load_to_delta_silver.png)
@@ -233,7 +236,7 @@ For example, below I changed one of the values of the raw data and after re-proc
 
 ![delta_cdc](./images/delta_cdc.png)
 
-
+The CDC strategy here is obviously dependant on the data source and would need to be implemented according to the ingestion layer.
 
 ## 3. Delta tables auditing
 
@@ -258,6 +261,11 @@ Below you can see how reports look in GX. Note that I've set fairly basic auditi
 
 ![gx_audit](./images/gx_audit.png)
 
+Note that we don't audit all the data, instead we use weighted reservoir sampling to select X records (`x` being customizable). Simply put, each record is assigned a reservoir based on their partition (e.g., city), and we then take a sample distribution that attempts to follow a certain desired weight. For example, if we set the weights as `{'New York': 3}` and `default_weight=1` then our New York reservoir sample would be 3 times larger than the other reservoirs (if possible). You could also set the `default_weight` to 0 and then you'd only have samples from New York (and so the weight doesn't matter and could be set to e.g., `{'New York': 0.00001}`).
+The idea of this sampling method is that you audit data according to the partitions that provide the most value, e.g., if most of your revenue comes from data using New York records, then you obviously want to pay special attention to those records. So you'd likely have more frequent auditing of those records, whilst doing lower frequency auditing of the remaining records.
+
+
+
 
 ## 4. Silver data deduplication
 
@@ -267,7 +275,9 @@ Deduplicate silver data based on each of the data models' primary key:
 dip dedup-silver
 ```
 
-In this step, the goal is to remove data duplicates, which are detected by detecting records with the same primary key (which depends on the underlying data source and respective data model). The elimitation of duplicates is based on the 1. whether the record is active (if info is available) and 2.0 the fill count of each flat record. We could also modify the data model to include a `global_score` based on other metrics. See `DuplicatesProcessor._deduplicate_silver` for more information. This step is "*optional*", but **recommended if the primary keys are strong indicators of data redundancy**.
+In this step, the goal is to remove data duplicates, which are detected by detecting records with the same primary key (which depends on the underlying data source and respective data model). The elimitation of duplicates is based on the 1. whether the record is active (if info is available) and 2.0 the fill count of each flat record. We could also modify the data model to include a `global_score` based on other metrics. See `DuplicatesProcessor._deduplicate_silver` for more information.
+
+This step is "*optional*", but **recommended if the primary keys are strong indicators of data redundancy**. You could alternatively skip this step and jump straight to entity resolution (ER) (although in this workflow I do required a `deduplicated.parquet` file to be present - this could be changed though), and assume that ER would cluster these data points together. You could then apply more complex ER integration methods to define the "real" record and eliminate (or partially keep) the duplicate records. As with everything, it depends on the business use-case, but you can get a clearer picture of how this could  be done inn the `integrated_record.py` data model.
 
 Note that this step takes a snapshot of the last state of the delta table and creates a deduplicated data, which is then fed into downstream steps. For example the deduplicated data of `data/silver/business_entity_registry/records.delta` is stored as `data/silver/business_entity_registry/deduplicated.parquet`
 
@@ -281,6 +291,7 @@ You can see for example that the licenses registry had a duplicate record:
 Where one of them is removed:
 
 ![deduplicate_silver_data](./images/deduplicate_silver_data.png)
+
 
 
 ## 5. Entity resolution - deduplication and linking
@@ -321,10 +332,12 @@ Besides the aforementioned points, there are 2 things we could improve upon:
 
 - version and store Splink models in Mlflow
 - expose links lineage and metadata for better entity resolution auditing
+- we could potentially include deterministic rules to either directly pre-filter some of the links, or even audit the data to help us define the linking strategy (e.g. if we have IDs intersection, this is an easy way to train a Splink model, the same could be said for other combinations of fields.)
 
 ![run_entity_resolution](./images/run_entity_resolution.png)
 
 ![minio_run_entity_resolution](./images/minio_run_entity_resolution.png)
+
 
 
 ## 6. Entity resolution result processing
@@ -337,6 +350,7 @@ dip create-integrated
 
 
 The next step processes all clusters formed by Splink and creates "integrated" records, where we:
+
     1. Evaluate each record according to record depth and record consensus with other records
     2. Per list of records define an anchor record (highest score record from `business_entity_registry` or `sub_contractors_registry`)
     3. Define an anchor record (which will represent the integrated record) and alternative entities, i.e., other records within the same cluster.
@@ -390,13 +404,20 @@ Minio:
 
 
 
+And that's the end of this documentation, thanks for reading!
 
 
 # TODO
+
 - add unit testing
-- add airflow sensors and respective orchestration. I've already started (see `dags`), but will need a few more days to wrap that up
+- add airflow sensors and respective orchestration. I've already created jobs/*.py for easy Airflow integration (and added some DAGs in `dags`), but will need a few more days to wrap that up.
 - Improve entity resolution : add better auditing for splink matches, model logging (Mlflow) and better Splink settings. This is the weakest point of this POC, but also natural due to the nature of the input data.
 - The IO objects don't have a well standardized protocol, so it ought to be improved. I'm using delta-scan in duckdb but then also have clients for each. This needs to be better standardized
 - Add more metrics, auditing, etc. At the moment we only really have logs, but this could be substantially improved. I could also add a dashboard later.
 - The pydantic data models schema and data model is redundant for integrated and gold records, and we need a better way to handle it
 - Add parallelism, a good option would be to batch the data and let tasks run independently. This would pair very easily with airflow. During ingestion and processing it would be rather straightforward, however, before entity resolution, we would just need to make sure all tasks are finished so that we compile the full data for matching.
+
+## Other features
+- We could also add a search/recomendation system, but for that we would need more depth in the records, ideally some descriptions so that we could apply some KNN on embeddings. This would also be an interesting exercise in vector search (ES/Qdrant) optimization.
+- We could add a classification system, where we classify the sector of the entities (e.g., based on NAIC or other ontologies)
+- A data lineage UI would be interesting as well, especially if more data sources are added.
